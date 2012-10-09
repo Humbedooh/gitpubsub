@@ -153,6 +153,7 @@ end
 --[[ cwrite: Write to one or more sockets, close them if need be ]]--
 function cwrite(uid, children, what) 
     if uid then
+        local child = children[uid]
         local x = child:send(what .. "\r\n")
         if x == nil then
             child:close()
@@ -200,7 +201,7 @@ end
 function greetChild(connections, child)
     X = X + 1
     connections[X] = child
-    cwrite(X, child, "Server: gitpubsub/0.1\r\n\r\n{\"commits\": [")
+    cwrite(X, connections, "Server: gitpubsub/0.1\r\n\r\n{\"commits\": [")
 end
 
 --[[ Actual server program starts here ]]--
