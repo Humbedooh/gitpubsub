@@ -65,5 +65,8 @@ Then simply run: `nohup lua gitpubsub.lua &` and you're done!
 GitPubSub requires the following modules/scripts:
 
 `luafilesystem` http://keplerproject.github.com/luafilesystem/
+
 `luasocket` http://luaforge.net/projects/luasocket/
+
 `JSON` http://regex.info/code/JSON.lua
+
