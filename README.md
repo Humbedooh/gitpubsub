@@ -14,14 +14,6 @@ the default svnpubsub port 2069) in JSON format.
 A post-receive hook is also available for notifying when a commit 
 has been pushed to the server.
 
-## Setting up the server: ##
-
-configure the location of your git repositories by setting the 
-`rootFolder` variable and write up a fitting criteria for which 
-folders to consider git repositories.
-
-Then simply run: `nohup lua gitpubsub.lua &` and you're done!
-
 
 ## Pulling data off gitpubsub ##
 Self-explanatory.
@@ -49,3 +41,29 @@ use the following script (edit it to fit your server):
        /usr/bin/lua /path/to/post_receive.lua $oldrev $newrev $refname
     done
 
+
+
+## Setting up the server: ##
+
+### Scanning for changes: ###
+To scan for changes, configure the location of your git repositories by 
+setting the `rootFolder` variable and write up a fitting criteria for which 
+folders to consider git repositories. 
+
+### Using a post-receive hook: ###
+To use a post-receive hook instead of an automated scan, set up the hook as 
+described above, and change your `trustedPeers` array to trust the origin 
+of the hook (usually this is 127.0.0.1).
+
+
+### Running the server: ###
+
+Then simply run: `nohup lua gitpubsub.lua &` and you're done!
+
+
+### Pre-requisites: ###
+GitPubSub requires the following modules/scripts:
+
+`luafilesystem` http://keplerproject.github.com/luafilesystem/
+`luasocket` http://luaforge.net/projects/luasocket/
+`JSON` http://regex.info/code/JSON.lua
