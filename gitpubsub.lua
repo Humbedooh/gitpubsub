@@ -69,7 +69,7 @@ function checkGit(repo, name)
                 local output = JSON:encode({commit=commit})
                 table.insert(backlog, output)
             end
-            if commit.id >= repoData.lastCommit then repoData.lastCommit = commit.id end
+            if commit.timestamp >= repoData.lastCommit then repoData.lastCommit = commit.timestamp end
         end
     end
 
