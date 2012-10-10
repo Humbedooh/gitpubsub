@@ -2,7 +2,7 @@ GitPubSub
 =========
 
 GitPubSub is a subscribable Git commit notification server 
-written in Lua.
+similar to SvnPubSub.
 
 Changes to git repositories are transmitted in JSON format to 
 anyone listening in on the HTTP service.
