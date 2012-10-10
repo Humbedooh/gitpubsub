@@ -217,7 +217,10 @@ function checkRequest(child)
     local a = os.time()
     child:settimeout(0.5)
     local rl = child:receive("*l") or "GET /"
-    if rl:match("^POST /json") or rl:match("^HEAD ") then
+    if rl:match("^HEAD") then
+        closeConn(child)
+    end
+    if rl:match("^POST /json") then
         while rl and rl:len() > 0 do
             b = os.time()
             if b-a > 10 then
@@ -244,14 +247,16 @@ function greetChild(child)
     cwrite(child, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
     local trusted = false
     local ip = child:getpeername()
-    for k, tip in pairs(trustedPeers or {}) do
-        if ip:match("^"..tip.."$") then
-            trusted = true
-            break
+    if ip then
+        for k, tip in pairs(trustedPeers or {}) do
+            if ip:match("^"..tip.."$") then
+                trusted = true
+                break
+            end
         end
-    end
-    if trusted then
-        checkRequest(child)
+        if trusted then
+            checkRequest(child)
+        end
     end
 end
 
