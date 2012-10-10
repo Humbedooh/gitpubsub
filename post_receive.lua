@@ -2,6 +2,7 @@
 
 local JSON = require "JSON"
 local socket = require "socket"
+local lfs = require "lfs"
 
 local old = arg[1] or "??"
 local new = arg[2] or "??"
@@ -9,9 +10,7 @@ local ref = arg[3] or "(master?)"
 
 local commit = {repository="git", ref=ref}
 
-local prog = io.popen("pwd")
-local pwd = prog:read("*l")
-prog:close()
+local pwd = lfs.currentdir()
 local project = pwd:match("([^/]+)$") or "unknown"
 
 local pipe = io.popen("git show --name-only " .. new or "??")
@@ -60,11 +59,8 @@ else
     commit.changes = #commit.files .. " files"
 end
 
-local out = JSON:encode({commit=commit})
 
-local f = io.open("test.txt", "w")
-f:write("JSON:\n" .. out .. "\n")
-f:close()
+local out = JSON:encode({commit=commit})
 
 local s = socket.tcp()
 s:settimeout(0.5)
