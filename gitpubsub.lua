@@ -214,12 +214,13 @@ end
 
 --[[ If we trust an IP, actually check the request for POST data ]]--
 function checkRequest(child)
-    local a = os.time()
     child:settimeout(0.5)
     local rl = child:receive("*l") or "GET /"
     if rl:match("^HEAD") then
         closeConn(child)
+        return
     end
+    local a = os.time()
     if rl:match("^POST /json") then
         while rl and rl:len() > 0 do
             b = os.time()
@@ -233,8 +234,10 @@ function checkRequest(child)
         end
         local json = child:receive("*l")
         if json then
-            --local arr = JSON:decode(json)
-            cwrite(connections, json..",")
+            local arr = JSON:decode(json)
+            if arr then -- if the JSON is valid
+                cwrite(connections, json..",")
+            end
             closeConn(child)
         end
     end
@@ -244,7 +247,7 @@ end
 function greetChild(child)
     X = X + 1
     connections[X] = child
-    cwrite(child, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
+    cwrite(child, "Server: gitpubsub/0.3\r\n\r\n{\"commits\": [")
     local trusted = false
     local ip = child:getpeername()
     if ip then
