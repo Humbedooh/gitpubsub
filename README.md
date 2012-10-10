@@ -28,5 +28,6 @@ clients. This is done by doing a `POST` request to /json:
 
     POST /json HTTP/1.1
     Content-Length: 1234
+    
     {"commit":{...}}
 
