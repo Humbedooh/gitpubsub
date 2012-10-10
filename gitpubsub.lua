@@ -11,7 +11,7 @@ local socket = require "socket" -- Lua Sockets
 --[[ General settings ]] --
 local rootFolder = "/var/git" -- Where the git repos live
 local criteria = "%.git" -- folders that match this are scanned
-local trustedPeers = { ".+" } -- a list of IP patterns we trust to make publications from the outside
+local trustedPeers = { ".*" } -- a list of IP patterns we trust to make publications from the outside
 
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
@@ -22,6 +22,7 @@ local gitRepos = {} -- git commit information array
 local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
 local master -- the master socket
+
 
 --[[ 
     checkGit(file-path, project-name):
@@ -167,7 +168,7 @@ function cwrite(who, what)
     if type(who) == "userdata" then
         who = {who}
     end
-    for k, child in pairs(connections) do
+    for k, child in pairs(who) do
         if child then
             local x = child:send(what .. "\r\n")
             if x == nil then
@@ -234,10 +235,7 @@ function checkRequest(child)
         end
         local json = child:receive("*l")
         if json then
-            local arr = JSON:decode(json)
-            if arr then -- if the JSON is valid
-                cwrite(connections, json..",")
-            end
+            cwrite(connections, json..",")
             closeConn(child)
         end
     end
@@ -247,7 +245,6 @@ end
 function greetChild(child)
     X = X + 1
     connections[X] = child
-    cwrite(child, "Server: gitpubsub/0.3\r\n\r\n{\"commits\": [")
     local trusted = false
     local ip = child:getpeername()
     if ip then
@@ -261,6 +258,7 @@ function greetChild(child)
             checkRequest(child)
         end
     end
+    cwrite(child, "Server: gitpubsub/0.3\r\n\r\n{\"commits\": [")
 end
 
 
