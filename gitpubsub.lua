@@ -65,7 +65,7 @@ function checkGit(repo, name)
             if commit.author and commit.subject and commit.email and commit.timestamp > repoData.lastCommit then
                 local mod = #commit.files .. " files"
                 if #commit.files == 1 then mod = commit.files[1] end
-                commit.files = mod
+                commit.changes = mod
                 local output = JSON:encode({commit=commit})
                 table.insert(backlog, output)
             end
