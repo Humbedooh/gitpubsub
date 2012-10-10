@@ -23,7 +23,6 @@ local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
 local master -- the master socket
 
-
 --[[ 
     checkGit(file-path, project-name):
     Runs a scan of the git directory and produces JSON output for new commits, tags and branches.
