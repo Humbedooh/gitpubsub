@@ -152,23 +152,27 @@ function checkGit(repo, name)
 end
 
 
---[[ cwrite: Write to one or more sockets, close them if need be ]]--
-function cwrite(uid, children, what) 
-    if uid then
-        local child = children[uid]
-        local x = child:send(what .. "\r\n")
-        if x == nil then
+--[[ closeConn: Close a connection and remove reference ]]--
+function closeConn(who)
+    for k, child in pairs(connections) do
+        if who == child then
+            connections[k] = nil
             child:close()
-            children[uid] = nil
+            return
         end
-    else
-        for k, child in pairs(children) do
-            if child then
-                local x = child:send(what .. "\r\n")
-                if x == nil then
-                    child:close()
-                    children[k] = nil
-                end
+    end
+end
+
+--[[ cwrite: Write to one or more sockets, close them if need be ]]--
+function cwrite(who, what) 
+    if type(who) == "userdata" then
+        who = {who}
+    end
+    for k, child in pairs(connections) do
+        if child then
+            local x = child:send(what .. "\r\n")
+            if x == nil then
+                closeConn(child)
             end
         end
     end
@@ -183,7 +187,7 @@ function updateGit(force)
             if repo:match(criteria) then
                 local backlog = checkGit(rootFolder .. "/" .. repo, repo)
                 for k, line in pairs(backlog) do
-                    cwrite(nil, connections, line..",")
+                    cwrite(connections, line..",")
                 end
             end
         end
@@ -194,7 +198,7 @@ end
 function ping()
     local t = os.time()
     if (t - latestPing) >= 5 then
-        cwrite(nil, connections, ("{\"stillalive\": %u},"):format(t))
+        cwrite(connections, ("{\"stillalive\": %u},"):format(t))
         latestPing = t
     end
 end
@@ -211,20 +215,25 @@ end
 
 --[[ If we trust an IP, actually check the request for POST data ]]--
 function checkRequest(child)
-    child:settimeout(10)
+    local a = os.time()
+    child:settimeout(0.5)
     local rl = child:receive("*l") or "GET /"
     if rl:match("^POST /json") then
         while rl and rl:len() > 0 do
+            b = os.time()
+            if b-a > 10 then
+                child:send("Request timed out!\r\n")
+                closeConn(child)
+                return
+            end
             rl = child:receive("*l")
             eventLoop()
         end
         local json = child:receive("*l")
         if json then
-            local arr = JSON:decode(json)
-            if arr then
-                cwrite(nil, connections, json..",")
-            end
-            child:close()
+            --local arr = JSON:decode(json)
+            cwrite(connections, json..",")
+            closeConn(child)
         end
     end
 end
@@ -234,7 +243,7 @@ function greetChild(child)
     child:settimeout(0.5)
     X = X + 1
     connections[X] = child
-    cwrite(X, connections, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
+    cwrite(child, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
     local trusted = false
     local ip = child:getpeername()
     for k, tip in pairs(trustedPeers or {}) do
