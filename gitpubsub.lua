@@ -11,6 +11,7 @@ local socket = require "socket" -- Lua Sockets
 --[[ General settings ]] --
 local rootFolder = "/var/git" -- Where the git repos live
 local criteria = "%.git" -- folders that match this are scanned
+local trustedPeers = { ".+" } -- a list of IP patterns we trust to make publications from the outside
 
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
@@ -20,6 +21,7 @@ local connections = {} -- socket placeholder
 local gitRepos = {} -- git commit information array
 local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
+local master -- the master socket
 
 
 --[[ 
@@ -173,7 +175,7 @@ function cwrite(uid, children, what)
 end
 
 --[[ Timer function for scanning Git repos ]]--
-function updateGit(conns, force)
+function updateGit(force)
     local t = os.time()
     if (t - latestGit) >= 5 or force then
         latestGit = t
@@ -181,7 +183,7 @@ function updateGit(conns, force)
             if repo:match(criteria) then
                 local backlog = checkGit(rootFolder .. "/" .. repo, repo)
                 for k, line in pairs(backlog) do
-                    cwrite(nil, conns, line..",")
+                    cwrite(nil, connections, line..",")
                 end
             end
         end
@@ -189,37 +191,76 @@ function updateGit(conns, force)
 end
 
 --[[ The usual 'stillalive' message sent to clients ]]--
-function ping(conns)
+function ping()
     local t = os.time()
     if (t - latestPing) >= 5 then
-        cwrite(nil, conns, ("{\"stillalive\": %u},"):format(t))
+        cwrite(nil, connections, ("{\"stillalive\": %u},"):format(t))
         latestPing = t
     end
 end
 
+--[[ Server event loop ]]--
+function eventLoop()
+    local child = master:accept()
+    if child then
+        greetChild(child)
+    end
+    updateGit()
+    ping()
+end
+
+--[[ If we trust an IP, actually check the request for POST data ]]--
+function checkRequest(child)
+    child:settimeout(10)
+    local rl = child:receive("*l") or "GET /"
+    if rl:match("^PUT /json") then
+        while rl and rl:len() > 0 do
+            rl = child:receive("*l")
+            eventLoop()
+        end
+        local json = child:receive("*l")
+        if json then
+            local arr = JSON:decode(json)
+            if arr then
+                cwrite(nil, connections, json..",")
+            end
+            child:close()
+        end
+    end
+end
+
 --[[ Initial client greeting ]]--
-function greetChild(connections, child)
+function greetChild(child)
+    child:settimeout(0.5)
     X = X + 1
     connections[X] = child
-    cwrite(X, connections, "Server: gitpubsub/0.1\r\n\r\n{\"commits\": [")
+    cwrite(X, connections, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
+    local trusted = false
+    local ip = child:getpeername()
+    for k, tip in pairs(trustedPeers or {}) do
+        if ip:match("^"..tip.."$") then
+            trusted = true
+            break
+        end
+    end
+    if trusted then
+        checkRequest(child)
+    end
 end
+
+
 
 --[[ Actual server program starts here ]]--
 local portnum = tonumber(arg[1]) or 2069
-local master = socket.bind("*", portnum)
+master = socket.bind("*", portnum)
 if not master then
     print("Could not bind to port "..portnum..", exiting")
     os.exit()
 end
 
 master:settimeout(0.01)
-updateGit(connections, true)
+updateGit(true)
 
 while true do
-    local child = master:accept()
-    if child then
-        greetChild(connections, child)
-    end
-    updateGit(connections)
-    ping(connections)
+    eventLoop()
 end
