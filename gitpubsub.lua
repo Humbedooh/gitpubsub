@@ -218,7 +218,7 @@ function checkRequest(child)
     local a = os.time()
     child:settimeout(0.5)
     local rl = child:receive("*l") or "GET /"
-    if rl:match("^POST /json") then
+    if rl:match("^POST /json") or rl:match("^HEAD ") then
         while rl and rl:len() > 0 do
             b = os.time()
             if b-a > 10 then
