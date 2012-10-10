@@ -1,19 +1,27 @@
-gitpubsub
+GitPubSub
 =========
 
-A subscribable Git commit notification server written in Lua.
+GitPubSub is a subscribable Git commit notification server 
+written in Lua.
 
-The server scans the local git repositories for changes and 
-publishes these changes through a HTTP service (listening on 
+Changes to git repositories are transmitted in JSON format to 
+anyone listening in on the HTTP service.
+
+By default, the server scans the local git repositories for 
+changes and publishes these through the HTTP service (listening on 
 the default svnpubsub port 2069) in JSON format.
 
-Setting up the server is quite easy:
+A post-receive hook is also available for notifying when a commit 
+has been pushed to the server.
+
+## Setting up the server: ##
 
 configure the location of your git repositories by setting the 
 `rootFolder` variable and write up a fitting criteria for which 
 folders to consider git repositories.
 
 Then simply run: `nohup lua gitpubsub.lua &` and you're done!
+
 
 ## Pulling data off gitpubsub ##
 Self-explanatory.
