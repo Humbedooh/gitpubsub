@@ -213,7 +213,7 @@ end
 function checkRequest(child)
     child:settimeout(10)
     local rl = child:receive("*l") or "GET /"
-    if rl:match("^PUT /json") then
+    if rl:match("^POST /json") then
         while rl and rl:len() > 0 do
             rl = child:receive("*l")
             eventLoop()

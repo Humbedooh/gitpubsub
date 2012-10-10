@@ -14,3 +14,20 @@ configure the location of your git repositories by setting the
 folders to consider git repositories.
 
 Then simply run: `nohup lua gitpubsub.lua &` and you're done!
+
+## Pulling data off gitpubsub ##
+Self-explanatory.
+Once you've set up gitpubsub, try running 
+`curl -i http://yourhost:2069/json` and watch the output.
+
+
+## Pushing data to gitpubsub ##
+In addition to the manual labor, gitpubsub also offers any client 
+matching the `trustedPeers` list to publicise data to all other 
+clients. This is done by doing a `POST` request to /json:
+
+`POST /json HTTP/1.1`
+`Content-Length: 1234`
+``
+`{"commit":{...}}`
+
