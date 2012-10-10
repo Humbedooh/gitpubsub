@@ -52,7 +52,7 @@ function checkGit(repo, name)
         else
             local ref = refs:match("([^%s/]+/[^%s/,]+)") or refs or "(nil)"
             ref = ref:gsub("^%(", ""):gsub("%)$", "")
-            Xcommit = { repository="git",dirs_changed={name},project=name,big_hash=bigHash,hash=hash,id=id,author=author,email=email,subject=subject,log=subject,ref=ref,files={},revision=hash}
+            Xcommit = { repository="git",dirs_changed={name},project=name,big_hash=bigHash,hash=hash,timestamp=id,author=author,email=email,subject=subject,log=subject,ref=ref,files={},revision=hash}
             table.insert(commits, Xcommit)
         end
     end
