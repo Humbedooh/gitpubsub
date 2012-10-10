@@ -240,7 +240,6 @@ end
 
 --[[ Initial client greeting ]]--
 function greetChild(child)
-    child:settimeout(0.5)
     X = X + 1
     connections[X] = child
     cwrite(child, "Server: gitpubsub/0.2\r\n\r\n{\"commits\": [")
