@@ -61,7 +61,6 @@ else
 end
 
 local out = JSON:encode({commit=commit})
-print(out)
 
 local f = io.open("test.txt", "w")
 f:write("JSON:\n" .. out .. "\n")
@@ -71,11 +70,9 @@ local s = socket.tcp()
 s:settimeout(0.5)
 local success, err = s:connect("127.0.0.1", 2069)
 if not success then
-    print("Failed to connect: ".. err .. "\n")
     os.exit()
 end
 
-print("Connected to gitpubsub")
 
 while true do
     local line = s:receive("*l")
@@ -87,5 +84,4 @@ s:send("Host: localhost\r\n\r\n")
 s:send(out .."\r\n")
 s:shutdown()
 s:close()
-print("All done!")
 

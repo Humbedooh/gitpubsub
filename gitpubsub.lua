@@ -9,8 +9,9 @@ local lfs = require "lfs" -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 
 --[[ General settings ]] --
-local rootFolder = "/var/git" -- Where the git repos live
+local rootFolder = nil -- Where the git repos live
 local criteria = "%.git" -- folders that match this are scanned
+local gitFolder = "" -- Set this to "./git" if needed
 local trustedPeers = { ".*" } -- a list of IP patterns we trust to make publications from the outside
 
 --[[ Miscellaneous variables used throughout the process ]]--
@@ -30,7 +31,7 @@ local master -- the master socket
 ]]--
 function checkGit(repo, name)
     local backlog = {}
-    local prg = io.popen(("git --git-dir %s/.git log -n 20 --summary --tags --raw --date=raw --reverse --pretty=format:\"%%H|%%h|%%ct|%%aN|%%ae|%%s|%%d\" --all"):format(repo), "r")
+    local prg = io.popen(("git --git-dir %s%s log -n 20 --summary --tags --raw --date=raw --reverse --pretty=format:\"%%H|%%h|%%ct|%%aN|%%ae|%%s|%%d\" --all"):format(repo, gitFolder), "r")
     local data = prg:read("*a")
     prg:close()
     gitRepos[repo] = gitRepos[repo] or {lastCommit=-1}
@@ -75,7 +76,7 @@ function checkGit(repo, name)
     end
 
     -- tags
-    local prg = io.popen(("git --git-dir %s/.git tag"):format(repo), "r")
+    local prg = io.popen(("git --git-dir %s%s tag"):format(repo, gitFolder), "r")
     local data = prg:read("*a")
     prg:close()
     for tag in data:gmatch("([^\r\n]+)") do
@@ -88,7 +89,7 @@ function checkGit(repo, name)
         end
         if not found then
             table.insert(gitTags[repo], tag)
-            local prg = io.popen(("git --git-dir %s/.git show \"%s\""):format(repo, tag), "r")
+            local prg = io.popen(("git --git-dir %s%s show \"%s\""):format(repo, gitFolder, tag), "r")
             local tagdata = prg:read("*a")
             prg:close()
             local tagger, email = tagdata:match("Tagger: (.-) <(.-)>")
@@ -112,7 +113,7 @@ function checkGit(repo, name)
     end
 
     -- branches
-    local prg = io.popen(("git --git-dir %s/.git branch"):format(repo), "r")
+    local prg = io.popen(("git --git-dir %s%s branch"):format(repo, gitFolder), "r")
     local data = prg:read("*a")
     prg:close()
     for tag in data:gmatch("([^\r\n]+)") do
@@ -126,7 +127,7 @@ function checkGit(repo, name)
         end
         if not found then
             table.insert(gitBranches[repo], tag)
-            local prg = io.popen(("git --git-dir %s/.git show \"%s\""):format(repo, tag), "r")
+            local prg = io.popen(("git --git-dir %s%s show \"%s\""):format(repo, gitFolder, tag), "r")
             local tagdata = prg:read("*a")
             prg:close()
             local tagger, email = tagdata:match("Tagger: (.-) <(.-)>")
@@ -217,7 +218,7 @@ end
 
 --[[ If we trust an IP, actually check the request for POST data ]]--
 function checkRequest(child)
-    child:settimeout(0.5)
+    child:settimeout(2)
     local rl = child:receive("*l") or "GET /"
     if rl:match("^HEAD") then
         closeConn(child)
