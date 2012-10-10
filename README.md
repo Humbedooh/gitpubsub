@@ -26,8 +26,7 @@ In addition to the manual labor, gitpubsub also offers any client
 matching the `trustedPeers` list to publicise data to all other 
 clients. This is done by doing a `POST` request to /json:
 
-`POST /json HTTP/1.1`
-`Content-Length: 1234`
-``
-`{"commit":{...}}`
+    POST /json HTTP/1.1
+    Content-Length: 1234
+    {"commit":{...}}
 
