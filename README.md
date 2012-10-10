@@ -38,6 +38,6 @@ use the following script (edit it to fit your server):
 
     while read oldrev newrev refname
     do
-       echo $oldrev $newrev $refname | /usr/bin/lua /path/to/post_receive.lua
+       /usr/bin/lua /path/to/post_receive.lua $oldrev $newrev $refname
     done
 
