@@ -183,11 +183,13 @@ function updateGit(force)
     local t = os.time()
     if (t - latestGit) >= 5 or force then
         latestGit = t
-        for repo in lfs.dir(rootFolder) do
-            if repo:match(criteria) then
-                local backlog = checkGit(rootFolder .. "/" .. repo, repo)
-                for k, line in pairs(backlog) do
-                    cwrite(connections, line..",")
+        if rootFolder then
+            for repo in lfs.dir(rootFolder) do
+                if repo:match(criteria) then
+                    local backlog = checkGit(rootFolder .. "/" .. repo, repo)
+                    for k, line in pairs(backlog) do
+                        cwrite(connections, line..",")
+                    end
                 end
             end
         end
