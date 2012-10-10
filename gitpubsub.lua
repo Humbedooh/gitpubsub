@@ -58,11 +58,11 @@ function checkGit(repo, name)
         end
     end
     for k, commit in pairs(commits) do
-        if commit.id then
+        if commit.timestamp then
             if repoData.lastCommit < 0 then 
-                repoData.lastCommit = commit.id
+                repoData.lastCommit = commit.timestamp
             end
-            if commit.author and commit.subject and commit.email and commit.id > repoData.lastCommit then
+            if commit.author and commit.subject and commit.email and commit.timestamp > repoData.lastCommit then
                 local mod = #commit.files .. " files"
                 if #commit.files == 1 then mod = commit.files[1] end
                 commit.files = mod
