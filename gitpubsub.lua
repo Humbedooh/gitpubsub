@@ -235,7 +235,7 @@ function checkRequest(child)
         local uptime = os.time() - START
         local y = 0
         for k, v in pairs(connections) do y = y + 1 end
-        child:send( ("Server: GitPubSub/0.4\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
+        child:send( ("HTTP/1.1 200 Okay\r\nServer: GitPubSub/0.4\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
         closeConn(child)
         return
     end
@@ -281,7 +281,7 @@ function greetChild(child)
             checkRequest(child)
         end
     end
-    cwrite(child, "Server: GitPubSub/0.4\r\n\r\n{\"commits\": [")
+    cwrite(child, "HTTP/1.1 200 Okay\r\nServer: GitPubSub/0.4\r\n\r\n{\"commits\": [")
 end
 
 
