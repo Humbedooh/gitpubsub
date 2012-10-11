@@ -9,7 +9,7 @@ local lfs = require "lfs" -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 
 --[[ General settings ]] --
-local rootFolder = nil -- Where the git repos live
+local rootFolder = nil -- Where the git repos live. Set it to nil to disable scanning
 local criteria = "%.git" -- folders that match this are scanned
 local gitFolder = "" -- Set this to "./git" if needed
 local trustedPeers = { ".*" } -- a list of IP patterns we trust to make publications from the outside
@@ -23,7 +23,9 @@ local gitRepos = {} -- git commit information array
 local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
 local master -- the master socket
-
+local SENT = 0
+local RECEIVED = 0
+local START = os.time()
 
 --[[ 
     checkGit(file-path, project-name):
@@ -169,9 +171,11 @@ function cwrite(who, what)
     if type(who) == "userdata" then
         who = {who}
     end
+    local s = what:len() + 2
     for k, child in pairs(who) do
         if child then
             local x = child:send(what .. "\r\n")
+            SENT = SENT + s
             if x == nil then
                 closeConn(child)
             end
@@ -216,11 +220,22 @@ function eventLoop()
     ping()
 end
 
+function upRec(line)
+    if line then
+        RECEIVED = RECEIVED + line:len()
+    end
+end
+
 --[[ If we trust an IP, actually check the request for POST data ]]--
 function checkRequest(child)
     child:settimeout(2)
     local rl = child:receive("*l") or "GET /"
+    upRec(rl)
     if rl:match("^HEAD") then
+        local uptime = os.time() - START
+        local y = 0
+        for k, v in pairs(connections) do y = y + 1 end
+        child:send( ("Server: GitPubSub/0.4\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
         closeConn(child)
         return
     end
@@ -234,9 +249,11 @@ function checkRequest(child)
                 return
             end
             rl = child:receive("*l")
+            upRec(rl)
             eventLoop()
         end
         local json = child:receive("*l")
+        upRec(json)
         if json then
             local arr = pcall(function() return JSON:decode(json) end)
             if arr then
@@ -264,7 +281,7 @@ function greetChild(child)
             checkRequest(child)
         end
     end
-    cwrite(child, "Server: gitpubsub/0.3\r\n\r\n{\"commits\": [")
+    cwrite(child, "Server: GitPubSub/0.4\r\n\r\n{\"commits\": [")
 end
 
 
