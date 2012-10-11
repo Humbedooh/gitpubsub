@@ -5,7 +5,7 @@
 
 --[[ External dependencies ]]--
 local JSON = require "JSON" -- JSON: http://regex.info/code/JSON.lua
-local lfs = require "lfs" -- LuaFileSystem
+local lfs = false -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 
 --[[ General settings ]] --
@@ -29,6 +29,10 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local greeting = "HTTP/1.1 OK\r\nServer: GitPubSub/0.5\r\n"
+
+if rootFolder then
+    lfs = require "lfs"
+end
 
 --[[ 
     checkGit(file-path, project-name):
