@@ -13,6 +13,7 @@ local rootFolder = nil -- Where the git repos live. Set it to nil to disable sca
 local criteria = "%.git" -- folders that match this are scanned
 local gitFolder = "" -- Set this to "./git" if needed
 local trustedPeers = { "127.*" } -- a list of IP patterns we trust to make publications from the outside
+local port = 2069 -- port to bind to (or path of unix domain socket to use)
 
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
@@ -312,7 +313,7 @@ end
 function createChild(socket)
     X = X + 1
     socket:settimeout(0)
-    local ip = socket:getpeername() or "?.?.?.?"
+    local ip = socket.getpeername and socket:getpeername() or "?.?.?.?"
     local obj = { 
         ip = ip,
         socket = socket, 
@@ -332,10 +333,16 @@ end
 
 
 --[[ Actual server program starts here ]]--
-local portnum = tonumber(arg[1]) or 2069
-master = socket.bind("*", portnum)
+if type(port) == "string" then
+    socket.unix = require "socket.unix"
+    master = socket.unix()
+    master:setsockname(port)
+    assert(master:listen())
+elseif type(port) == "number" then
+    master = socket.bind("*", port)
+end
 if not master then
-    print("Could not bind to port "..portnum..", exiting")
+    print("Could not bind to port "..port..", exiting")
     os.exit()
 end
 
