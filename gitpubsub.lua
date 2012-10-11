@@ -238,7 +238,10 @@ function checkRequest(child)
         end
         local json = child:receive("*l")
         if json then
-            cwrite(connections, json..",")
+            local arr = pcall(function() return JSON:decode(json) end)
+            if arr then
+                cwrite(connections, json..",")
+            end
             closeConn(child)
         end
     end
