@@ -73,10 +73,16 @@ something similar to:
     X-Received: 584421
     X-Sent: 1563105
 
+
+### Other uses ###
+GitPubSub can be used to broadcast any form of JSON-encoded data to multiple 
+recipients, not just Git commits.
+
+
 ### Pre-requisites: ###
 GitPubSub requires the following modules/scripts:
 
-`luafilesystem` http://keplerproject.github.com/luafilesystem/
+`luafilesystem` http://keplerproject.github.com/luafilesystem/ (only required if local scanning is active)
 
 `luasocket` http://luaforge.net/projects/luasocket/
 
