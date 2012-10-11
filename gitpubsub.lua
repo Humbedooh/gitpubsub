@@ -12,13 +12,15 @@ local socket = require "socket" -- Lua Sockets
 local rootFolder = nil -- Where the git repos live. Set it to nil to disable scanning
 local criteria = "%.git" -- folders that match this are scanned
 local gitFolder = "" -- Set this to "./git" if needed
-local trustedPeers = { ".*" } -- a list of IP patterns we trust to make publications from the outside
+local trustedPeers = { "127.*" } -- a list of IP patterns we trust to make publications from the outside
 
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
 local latestPing = 0 -- timestamp for latest ping
 local X = 0 -- number of connections server so far, used to keep track of open sockets
-local connections = {} -- socket placeholder
+local subscribers = {} -- socket placeholder for connections we are broadcasting to
+local presubscribers = {} -- socket placeholder for connections being set up
+local waitingForJSON = {} -- socket placeholders for input
 local gitRepos = {} -- git commit information array
 local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
@@ -26,6 +28,7 @@ local master -- the master socket
 local SENT = 0
 local RECEIVED = 0
 local START = os.time()
+local greeting = "HTTP/1.1 OK\r\nServer: GitPubSub/0.5\r\n"
 
 --[[ 
     checkGit(file-path, project-name):
@@ -157,9 +160,9 @@ end
 
 --[[ closeConn: Close a connection and remove reference ]]--
 function closeConn(who)
-    for k, child in pairs(connections) do
+    for k, child in pairs(subscribers) do
         if who == child then
-            connections[k] = nil
+            subscribers[k] = nil
             child:close()
             return
         end
@@ -183,18 +186,14 @@ function cwrite(who, what)
     end
 end
 
---[[ Timer function for scanning Git repos ]]--
+--[[ Function for scanning Git repos ]]--
 function updateGit(force)
-    local t = os.time()
-    if (t - latestGit) >= 5 or force then
-        latestGit = t
-        if rootFolder then
-            for repo in lfs.dir(rootFolder) do
-                if repo:match(criteria) then
-                    local backlog = checkGit(rootFolder .. "/" .. repo, repo)
-                    for k, line in pairs(backlog) do
-                        cwrite(connections, line..",")
-                    end
+    if rootFolder then
+        for repo in lfs.dir(rootFolder) do
+            if repo:match(criteria) then
+                local backlog = checkGit(rootFolder .. "/" .. repo, repo)
+                for k, line in pairs(backlog) do
+                    cwrite(subscribers, line..",")
                 end
             end
         end
@@ -202,22 +201,24 @@ function updateGit(force)
 end
 
 --[[ The usual 'stillalive' message sent to clients ]]--
-function ping()
-    local t = os.time()
-    if (t - latestPing) >= 5 then
-        cwrite(connections, ("{\"stillalive\": %u},"):format(t))
-        latestPing = t
-    end
+function ping(t)
+   cwrite(subscribers, ("{\"stillalive\": %u},"):format(t))
 end
 
 --[[ Server event loop ]]--
 function eventLoop()
     local child = master:accept()
     if child then
-        greetChild(child)
+        createChild(child)
     end
-    updateGit()
-    ping()
+    readRequests()
+    checkJSON()
+    local t = os.time()
+    if (t - latestPing) >= 5 then
+        latestPing = t
+        updateGit()
+        ping(t)
+    end
 end
 
 function upRec(line)
@@ -226,62 +227,102 @@ function upRec(line)
     end
 end
 
---[[ If we trust an IP, actually check the request for POST data ]]--
-function checkRequest(child)
-    child:settimeout(2)
-    local rl = child:receive("*l") or "GET /"
-    upRec(rl)
-    if rl:match("^HEAD") then
-        local uptime = os.time() - START
-        local y = 0
-        for k, v in pairs(connections) do y = y + 1 end
-        child:send( ("HTTP/1.1 200 Okay\r\nServer: GitPubSub/0.4\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
-        closeConn(child)
-        return
-    end
-    local a = os.time()
-    if rl:match("^POST /json") then
-        while rl and rl:len() > 0 do
-            b = os.time()
-            if b-a > 10 then
-                child:send("Request timed out!\r\n")
-                closeConn(child)
-                return
+
+function checkJSON()
+    for k, child in pairs(waitingForJSON) do
+        if child then
+            local rl, err = child.socket:receive("*l")
+            if rl then 
+                upRec(rl)
+                local arr = pcall(function() return JSON:decode(rl) end)
+                if arr then
+                    cwrite(subscribers, rl .. ",")
+                end
+                child.socket:close()
+                waitingForJSON[k] = nil
+                child.socket:send(greeting)
+                child.socket:send("\r\n")
+                SENT = SENT + (select(2, child.socket:getstats()) or 0)
+                child.socket:close()
+            elseif err == "closed" then
+                child.socket:close()
+                waitingForJSON[k] = nil
             end
-            rl = child:receive("*l")
-            upRec(rl)
-            eventLoop()
-        end
-        local json = child:receive("*l")
-        upRec(json)
-        if json then
-            local arr = pcall(function() return JSON:decode(json) end)
-            if arr then
-                cwrite(connections, json..",")
-            end
-            closeConn(child)
         end
     end
 end
 
---[[ Initial client greeting ]]--
-function greetChild(child)
-    X = X + 1
-    connections[X] = child
-    local trusted = false
-    local ip = child:getpeername()
-    if ip then
-        for k, tip in pairs(trustedPeers or {}) do
-            if ip:match("^"..tip.."$") then
-                trusted = true
-                break
-            end
-        end
-        if trusted then
-            checkRequest(child)
+function processChildRequest(child)
+    if child.action == "GET" then
+        child.socket:send(greeting)
+        child.socket:send("\r\n")
+        SENT = SENT + (select(2, child.socket:getstats()) or 0)
+        table.insert(subscribers, child.socket)
+    elseif child.action == "HEAD" then
+        child.socket:send(greeting)
+        local uptime = os.time() - START
+        local y = 0
+        for k, v in pairs(subscribers) do y = y + 1 end
+        child.socket:send( ("X-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
+        SENT = SENT + (select(2, child.socket:getstats()) or 0)
+        child.socket:close()
+    elseif child.action == "POST" then
+        if child.trusted then
+            table.insert(waitingForJSON, child)
         end
     end
-    cwrite(child, "HTTP/1.1 200 Okay\r\nServer: GitPubSub/0.4\r\n\r\n{\"commits\": [")
+end
+
+--[[ Check if a client has provided request header data ]]--
+function readRequests()
+    for k, child in pairs(presubscribers) do
+        if child then
+            local rl, err = child.socket:receive("*l")
+            if rl then 
+                upRec(rl)
+                if rl:len() == 0 then
+                    processChildRequest(child)
+                    presubscribers[k] = nil
+                else
+                    if not child.action then
+                        local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
+                        if not action or not uri then
+                            child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nBad request sent!")
+                            child.socket:close()
+                            presubscribers[k] = nil
+                        else
+                            child.action = action:upper()
+                            child.uri = uri
+                        end
+                    end
+                end
+            elseif err == "closed" then
+                presubscribers[k] = nil
+                child.socket:close()
+            end
+        end
+    end
+end
+
+--[[ Initial client creation ]]--
+function createChild(socket)
+    X = X + 1
+    socket:settimeout(0)
+    local ip = socket:getpeername() or "?.?.?.?"
+    local obj = { 
+        ip = ip,
+        socket = socket, 
+        trusted = false,
+        URI = nil,
+        action = nil
+    }
+    for k, tip in pairs(trustedPeers or {}) do
+        if ip:match("^"..tip.."$") then
+            obj.trusted = true
+            break
+        end
+    end
+    presubscribers[X] = obj
 end
 
 
