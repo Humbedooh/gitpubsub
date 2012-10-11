@@ -60,6 +60,18 @@ of the hook (usually this is 127.0.0.1).
 
 Then simply run: `nohup lua gitpubsub.lua &` and you're done!
 
+### Polling for statistics ###
+
+If your IP is within the `trustedPeers` list, you can poll the server for 
+statistics by running: `curl -I http://localhost:2069`. This will output 
+something similar to:
+
+    Server: GitPubSub/0.4
+    X-Uptime: 200
+    X-Connections: 1
+    X-Total-Connections: 39017
+    X-Received: 584421
+    X-Sent: 1563105
 
 ### Pre-requisites: ###
 GitPubSub requires the following modules/scripts:
