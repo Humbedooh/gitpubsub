@@ -274,6 +274,9 @@ function processChildRequest(child)
     elseif child.action == "POST" then
         if child.trusted then
             table.insert(waitingForJSON, child)
+        else
+            child.socket:send("HTTP/1.1 403 Denied\r\n\r\nOnly trusted sources may send data!")
+            child.socket:close()
         end
     end
 end
