@@ -32,7 +32,7 @@ local master -- the master socket
 local SENT = 0
 local RECEIVED = 0
 local START = os.time()
-local greeting = "HTTP/1.1 OK\r\nServer: GitPubSub/0.5\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.5\r\n"
 
 if rootFolder then
     lfs = require "lfs"
