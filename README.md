@@ -1,37 +1,19 @@
 GitPubSub
 =========
 
-GitPubSub is a subscribable Git commit notification server 
-similar to SvnPubSub.
+GitPubSub Publisher/Subscriber service for JSON based communication, 
+developed for broadcasting git commits.
 
 Changes to git repositories are transmitted in JSON format to 
 anyone listening in on the HTTP service.
 
-By default, the server scans the local git repositories for 
+
+## Publishing data to GitPubSub ##
+If `rootFolder` is set, the server scans the local git repositories for 
 changes and publishes these through the HTTP service (listening on 
-the default svnpubsub port 2069) in JSON format.
+the default svnpubsub port 2069) in JSON format at the URI `/json`.
 
-A post-receive hook is also available for notifying when a commit 
-has been pushed to the server.
-
-
-## Pulling data off gitpubsub ##
-Self-explanatory.
-Once you've set up gitpubsub, try running 
-`curl -i http://yourhost:2069/json` and watch the output.
-
-
-## Pushing data to gitpubsub ##
-In addition to the manual labor, gitpubsub also offers any client 
-matching the `trustedPeers` list to publicise data to all other 
-clients. This is done by doing a `POST` request to /json:
-
-    POST /json HTTP/1.1
-    Content-Length: 1234
-    
-    {"commit":{...}}
-
-## Using a post-receive hook instead ##
+### Using a post-receive hook to publish commits ###
 If you don't feel like parsing the git repo every 5 seconds, you 
 can instead add a post-receive hook to your Git server. Simply 
 use the following script (edit it to fit your server):
@@ -41,19 +23,31 @@ use the following script (edit it to fit your server):
        /usr/bin/lua /path/to/post_receive.lua $oldrev $newrev $refname
     done
 
+This will cause new commits to publish to `http://localhost:2069/json` 
+by default.
+
+### Manually pusblishing JSON data ###
+GitPubSub offers any client matching the `trustedPeers` list 
+to publicise data to all other clients. This is done by doing 
+a `POST` request to the URI they wish to publish to:
+
+    POST /json HTTP/1.1
+    Content-Length: 1234
+    
+    {"commit":{...}}
 
 
-## Setting up the server: ##
+## Pulling data off GitPubSub ##
+Self-explanatory.
+Once you've set up GitPubSub, try running 
+`curl -i http://yourhost:2069/json` and watch the output.
 
-### Scanning for changes: ###
-To scan for changes, configure the location of your git repositories by 
-setting the `rootFolder` variable and write up a fitting criteria for which 
-folders to consider git repositories. 
 
-### Using a post-receive hook: ###
-To use a post-receive hook instead of an automated scan, set up the hook as 
-described above, and change your `trustedPeers` array to trust the origin 
-of the hook (usually this is 127.0.0.1).
+## Access control: ##
+The `trustedPeers` array contains a list of clients allowed to publish 
+to the GitPubSub server. By default, only 127.0.0.1 is allowed to publish.
+
+Any client can grab the JSON feeds off the server.
 
 
 ### Running the server: ###
