@@ -10,7 +10,7 @@ anyone listening in on the HTTP service.
 ## Pub/Sub model ##
 GitPubSub broadcasts based on the URI requested. If a client subscribes 
 to `/foo`, then all messages sent to `/foo` or its sub-directories (such 
-as `/foo/bar` will be broadcast to this client. This enables clients to 
+as `/foo/bar`) will be broadcast to this client. This enables clients to 
 subscribe to whichever specific segment they wish to listen in on.
 
 
