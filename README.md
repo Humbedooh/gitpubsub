@@ -7,6 +7,12 @@ developed for broadcasting git commits.
 Changes to git repositories are transmitted in JSON format to 
 anyone listening in on the HTTP service.
 
+## Pub/Sub model ##
+GitPubSub broadcasts based on the URI requested. If a client subscribes 
+to `/foo`, then all messages sent to `/foo` or its sub-directories (such 
+as `/foo/bar` will be broadcast to this client. This enables clients to 
+subscribe to whichever specific segment they wish to listen in on.
+
 
 ## Publishing data to GitPubSub ##
 If `rootFolder` is set, the server scans the local git repositories for 
