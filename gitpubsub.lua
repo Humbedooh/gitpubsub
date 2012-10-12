@@ -185,26 +185,28 @@ end
 --[[ closeConn: Close a connection and remove reference ]]--
 function closeConn(who)
     for k, child in pairs(subscribers) do
-        if who == child then
+        if who == child.socket then
             subscribers[k] = nil
-            child:close()
+            child.socket:close()
             return
         end
     end
 end
 
 --[[ cwrite: Write to one or more sockets, close them if need be ]]--
-function cwrite(who, what) 
+function cwrite(who, what, uri) 
     if type(who) == "userdata" then
         who = {who}
     end
     local s = what:len() + 2
     for k, child in pairs(who) do
         if child then
-            local x = child:send(what .. "\r\n")
-            SENT = SENT + s
-            if x == nil then
-                closeConn(child)
+            if not uri or uri:match("^"..child.uri) then
+                local x = child.socket:send(what .. "\r\n")
+                SENT = SENT + s
+                if x == nil then
+                    closeConn(child.socket)
+                end
             end
         end
     end
@@ -265,7 +267,7 @@ function checkJSON()
                     okay = pcall(function() return json.decode(rl) end)
                 end
                 if okay then
-                    cwrite(subscribers, rl .. ",")
+                    cwrite(subscribers, rl .. ",", child.uri)
                 end
                 child.socket:close()
                 waitingForJSON[k] = nil
@@ -286,7 +288,7 @@ function processChildRequest(child)
         child.socket:send(greeting)
         child.socket:send("\r\n")
         SENT = SENT + (select(2, child.socket:getstats()) or 0)
-        table.insert(subscribers, child.socket)
+        table.insert(subscribers, child)
     elseif child.action == "HEAD" then
         child.socket:send(greeting)
         local uptime = os.time() - START
