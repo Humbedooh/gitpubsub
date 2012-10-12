@@ -1,6 +1,9 @@
 #!/usr/bin/lua
 
-local JSON = require "JSON"
+local json = false
+local JSON = false
+pcall(function() JSON = require "JSON" end) -- JSON: http://regex.info/code/JSON.lua
+pcall(function() json = require "json" end) -- LuaJSON, if available
 local socket = require "socket"
 local lfs = false
 pcall(function() lfs = require "lfs" end)
@@ -75,8 +78,13 @@ else
 end
 
 
-local out = JSON:encode({commit=commit})
-
+local output = ""
+if JSON then 
+    output = JSON:encode({commit=commit})
+elseif json then
+    output = json.encode({commit=commit})
+end
+print(output)
 local s = socket.tcp()
 s:settimeout(0.5)
 local success, err = s:connect("127.0.0.1", 2069)
@@ -86,7 +94,7 @@ end
 
 s:send("POST /json HTTP/1.1\r\n")
 s:send("Host: localhost\r\n\r\n")
-s:send(out .."\r\n")
+s:send(output .."\r\n")
 s:shutdown()
 s:close()
 

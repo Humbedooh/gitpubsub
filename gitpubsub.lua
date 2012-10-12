@@ -4,7 +4,10 @@
 ]]--
 
 --[[ External dependencies ]]--
-local JSON = require "JSON" -- JSON: http://regex.info/code/JSON.lua
+local json = false
+local JSON = false
+pcall(function() JSON = require "JSON" end) -- JSON: http://regex.info/code/JSON.lua
+pcall(function() json = require "json" end) -- LuaJSON, if available
 local lfs = false -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 
@@ -78,7 +81,12 @@ function checkGit(repo, name)
                 local mod = #commit.files .. " files"
                 if #commit.files == 1 then mod = commit.files[1] end
                 commit.changes = mod
-                local output = JSON:encode({commit=commit})
+                local output = ""
+                if JSON then 
+                    output = JSON:encode({commit=commit})
+                elseif json then
+                    output = json.encode({commit=commit})
+                end
                 table.insert(backlog, output)
             end
             if commit.timestamp >= repoData.lastCommit then repoData.lastCommit = commit.timestamp end
@@ -117,7 +125,13 @@ function checkGit(repo, name)
                 revision = "",
                 project=name
             }
-            local output = JSON:encode({commit=commit})
+            local output = ""
+            if JSON then 
+                output = JSON:encode({commit=commit})
+            elseif json then
+                output = json.encode({commit=commit})
+            end
+
             table.insert(backlog, output)
         end
     end
@@ -155,7 +169,12 @@ function checkGit(repo, name)
                 revision = "",
                 project=name
             }
-            local output = JSON:encode({commit=commit})
+            local output = ""
+            if JSON then 
+                output = JSON:encode({commit=commit})
+            elseif json then
+                output = json.encode({commit=commit})
+            end
             table.insert(backlog, output)
         end
     end
@@ -239,8 +258,13 @@ function checkJSON()
             local rl, err = child.socket:receive("*l")
             if rl then 
                 upRec(rl)
-                local arr = pcall(function() return JSON:decode(rl) end)
-                if arr then
+                local okay = false
+                if JSON then 
+                    okay = pcall(function() return JSON:decode(rl) end)
+                elseif json then
+                    okay = pcall(function() return json.decode(rl) end)
+                end
+                if okay then
                     cwrite(subscribers, rl .. ",")
                 end
                 child.socket:close()
