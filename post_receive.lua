@@ -4,16 +4,21 @@ local JSON = require "JSON"
 local socket = require "socket"
 local lfs = require "lfs"
 
-local old = arg[1] or "??"
-local new = arg[2] or "??"
-local ref = arg[3] or "(master?)"
+local old = arg[1]
+local new = arg[2]
+local ref = arg[3] or "(no ref)"
+
+if not old or not new then
+    print("Usage: post-receive [old] [new] [ref]")
+    os.exit()
+end
 
 local commit = {repository="git", ref=ref}
 
 local pwd = lfs.currentdir()
 local project = pwd:match("([^/]+)$") or "unknown"
 
-local pipe = io.popen("git show --name-only " .. new or "??")
+local pipe = io.popen("git show --name-only " .. new)
 commit.hash = new
 commit.shortHash = commit.hash:sub(1,7)
 commit.project = project
@@ -67,12 +72,6 @@ s:settimeout(0.5)
 local success, err = s:connect("127.0.0.1", 2069)
 if not success then
     os.exit()
-end
-
-
-while true do
-    local line = s:receive("*l")
-    if not line or line:len() == 0 then break end
 end
 
 s:send("POST /json HTTP/1.1\r\n")
