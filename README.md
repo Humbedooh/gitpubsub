@@ -86,5 +86,9 @@ GitPubSub requires the following modules/scripts:
 
 `luasocket` http://luaforge.net/projects/luasocket/
 
+`LuaJSON` http://luaforge.net/projects/luajson/
+
+OR
+
 `JSON` http://regex.info/code/JSON.lua
 
