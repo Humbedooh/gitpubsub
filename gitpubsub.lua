@@ -28,11 +28,15 @@ local waitingForJSON = {} -- socket placeholders for input
 local gitRepos = {} -- git commit information array
 local gitTags = {} -- git tag array
 local gitBranches = {} -- git branch array
-local master -- the master socket
+local master, maccept -- the master socket
 local SENT = 0
 local RECEIVED = 0
 local START = os.time()
+local TIME = START
 local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.5\r\n"
+
+--[[ function shortcuts ]]--
+local time, tinsert, strlen = os.time, table.insert, string.len
 
 if rootFolder then
     lfs = require "lfs"
@@ -213,7 +217,7 @@ function cwrite(who, what, uri)
 end
 
 --[[ Function for scanning Git repos ]]--
-function updateGit(force)
+function updateGit()
     if rootFolder then
         for repo in lfs.dir(rootFolder) do
             if repo:match(criteria) then
@@ -231,29 +235,19 @@ function ping(t)
    cwrite(subscribers, ("{\"stillalive\": %u},"):format(t))
 end
 
---[[ Server event loop ]]--
-function eventLoop()
-    local child = master:accept()
-    if child then
-        createChild(child)
-    end
-    readRequests()
-    checkJSON()
-    local t = os.time()
-    if (t - latestPing) >= 5 then
-        latestPing = t
-        updateGit()
-        ping(t)
-    end
-end
-
+--[[ upRec: Keep tally of bytes received ]]--
 function upRec(line)
     if line then
         RECEIVED = RECEIVED + line:len()
     end
 end
 
-
+--[[ 
+checkJSON:
+    
+    Waits for clients with a POST request to send JSON, and then transmits it
+    to subscribers.
+]]--
 function checkJSON()
     for k, child in pairs(waitingForJSON) do
         if child then
@@ -283,23 +277,33 @@ function checkJSON()
     end
 end
 
+--[[ 
+processChildRequest(child):
+    
+    Processes a request once the initial headers have been sent.
+]]--
 function processChildRequest(child)
     if child.action == "GET" then
-        child.socket:send(greeting)
-        child.socket:send("\r\n")
+        child.socket:send(greeting .. "\r\n")
         SENT = SENT + (select(2, child.socket:getstats()) or 0)
         table.insert(subscribers, child)
     elseif child.action == "HEAD" then
         child.socket:send(greeting)
-        local uptime = os.time() - START
         local y = 0
         for k, v in pairs(subscribers) do y = y + 1 end
-        child.socket:send( ("X-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(uptime, y, X, RECEIVED, SENT) )
+        child.socket:send( ("X-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(TIME - START, y, X, RECEIVED, SENT) )
         SENT = SENT + (select(2, child.socket:getstats()) or 0)
         child.socket:close()
     elseif child.action == "POST" then
+        local ip = child.socket.getpeername and child.socket:getpeername() or "?.?.?.?"
+        for k, tip in pairs(trustedPeers or {}) do
+            if ip:match("^"..tip.."$") then
+                child.trusted = true
+                break
+            end
+        end
         if child.trusted then
-            table.insert(waitingForJSON, child)
+            tinsert(waitingForJSON, child)
         else
             child.socket:send("HTTP/1.1 403 Denied\r\n\r\nOnly trusted sources may send data!")
             child.socket:close()
@@ -314,7 +318,7 @@ function readRequests()
             local rl, err = child.socket:receive("*l")
             if rl then 
                 upRec(rl)
-                if rl:len() == 0 then
+                if strlen(rl) == 0 then
                     processChildRequest(child)
                     presubscribers[k] = nil
                 else
@@ -341,24 +345,32 @@ end
 --[[ Initial client creation ]]--
 function createChild(socket)
     X = X + 1
-    socket:settimeout(0)
-    local ip = socket.getpeername and socket:getpeername() or "?.?.?.?"
     local obj = { 
-        ip = ip,
         socket = socket, 
         trusted = false,
         URI = nil,
         action = nil
     }
-    for k, tip in pairs(trustedPeers or {}) do
-        if ip:match("^"..tip.."$") then
-            obj.trusted = true
-            break
-        end
-    end
     presubscribers[X] = obj
 end
 
+
+
+--[[ Server event loop ]]--
+function eventLoop()
+    local child = maccept(master)
+    if child then
+        createChild(child)
+    end
+    readRequests()
+    checkJSON()
+    TIME = time()
+    if (TIME - latestPing) >= 5 then
+        latestPing = TIME
+        updateGit()
+        ping(TIME)
+    end
+end
 
 
 --[[ Actual server program starts here ]]--
@@ -375,8 +387,9 @@ if not master then
     os.exit()
 end
 
-master:settimeout(0.01)
-updateGit(true)
+master:settimeout(0.005)
+maccept = master.accept
+updateGit()
 
 while true do
     eventLoop()
