@@ -2,7 +2,8 @@
 
 local JSON = require "JSON"
 local socket = require "socket"
-local lfs = require "lfs"
+local lfs = false
+pcall(function() lfs = require "lfs" end)
 
 local old = arg[1]
 local new = arg[2]
@@ -15,7 +16,16 @@ end
 
 local commit = {repository="git", ref=ref}
 
-local pwd = lfs.currentdir()
+local pwd = ""
+if lfs then
+    pwd = lfs.currentdir()
+else
+    local p = io.popen("pwd")
+    if p then
+        pwd = p:read("*l")
+        p:close()
+    end
+end
 local project = pwd:match("([^/]+)$") or "unknown"
 
 local pipe = io.popen("git show --name-only " .. new)
