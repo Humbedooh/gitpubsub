@@ -196,7 +196,6 @@ function cwrite(who, what, uri)
     if type(who) == "userdata" then
         who = {who}
     end
-    local s = #what + 2
     local request
     for k, socket in pairs(who) do
         if socket then
@@ -204,7 +203,6 @@ function cwrite(who, what, uri)
             print(uri, request.uri)
             if not uri or uri:match("^"..request.uri) then
                 local x = socket:send(what .. "\r\n")
-                SENT = SENT + s
                 if x == nil then
                     closeSocket(socket)
                 end
@@ -404,5 +402,9 @@ while true do
         updateGit()
         ping(TIME)
     end
-    socket.sleep(0.00005)
+    if #readFrom + #writeTo > 0 then
+        socket.sleep(0.005)
+    else
+        socket.sleep(0.05)
+    end
 end
