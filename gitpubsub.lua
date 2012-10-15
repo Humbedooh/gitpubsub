@@ -33,14 +33,18 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local TIME = START
-local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.5\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.6\r\n"
 
 --[[ function shortcuts ]]--
-local time, tinsert, strlen = os.time, table.insert, string.len
+local time, tinsert, strlen, sselect = os.time, table.insert, string.len, socket.select
 
 if rootFolder then
     lfs = require "lfs"
 end
+
+local readFrom = {}
+local writeTo = {}
+local requests = {}
 
 --[[ 
     checkGit(file-path, project-name):
@@ -186,30 +190,23 @@ function checkGit(repo, name)
 end
 
 
---[[ closeConn: Close a connection and remove reference ]]--
-function closeConn(who)
-    for k, child in pairs(subscribers) do
-        if who == child.socket then
-            subscribers[k] = nil
-            child.socket:close()
-            return
-        end
-    end
-end
 
 --[[ cwrite: Write to one or more sockets, close them if need be ]]--
 function cwrite(who, what, uri) 
     if type(who) == "userdata" then
         who = {who}
     end
-    local s = what:len() + 2
-    for k, child in pairs(who) do
-        if child then
-            if not uri or uri:match("^"..child.uri) then
-                local x = child.socket:send(what .. "\r\n")
+    local s = #what + 2
+    local request
+    for k, socket in pairs(who) do
+        if socket then
+            request = requests[socket]
+            print(uri, request.uri)
+            if not uri or uri:match("^"..request.uri) then
+                local x = socket:send(what .. "\r\n")
                 SENT = SENT + s
                 if x == nil then
-                    closeConn(child.socket)
+                    closeSocket(socket)
                 end
             end
         end
@@ -223,7 +220,7 @@ function updateGit()
             if repo:match(criteria) then
                 local backlog = checkGit(rootFolder .. "/" .. repo, repo)
                 for k, line in pairs(backlog) do
-                    cwrite(subscribers, line..",")
+                    cwrite(writeTo, line..",")
                 end
             end
         end
@@ -232,14 +229,7 @@ end
 
 --[[ The usual 'stillalive' message sent to clients ]]--
 function ping(t)
-   cwrite(subscribers, ("{\"stillalive\": %u},"):format(t))
-end
-
---[[ upRec: Keep tally of bytes received ]]--
-function upRec(line)
-    if line then
-        RECEIVED = RECEIVED + line:len()
-    end
+   cwrite(writeTo, ("{\"stillalive\": %u},"):format(t))
 end
 
 --[[ 
@@ -253,7 +243,6 @@ function checkJSON()
         if child then
             local rl, err = child.socket:receive("*l")
             if rl then 
-                upRec(rl)
                 local okay = false
                 if JSON then 
                     okay = pcall(function() return JSON:decode(rl) end)
@@ -261,16 +250,15 @@ function checkJSON()
                     okay = pcall(function() return json.decode(rl) end)
                 end
                 if okay then
-                    cwrite(subscribers, rl .. ",", child.uri)
+                    cwrite(writeTo, rl .. ",", child.uri)
+                    child.socket:send(greeting .."\r\n\r\nMessage sent!\r\n")
+                else
+                    child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nInvalid JSON data posted :(\r\n")
                 end
-                child.socket:close()
                 waitingForJSON[k] = nil
-                child.socket:send(greeting)
-                child.socket:send("\r\n")
-                SENT = SENT + (select(2, child.socket:getstats()) or 0)
-                child.socket:close()
+                closeSocket(child.socket)
             elseif err == "closed" then
-                child.socket:close()
+                closeSocket(child.socket)
                 waitingForJSON[k] = nil
             end
         end
@@ -283,17 +271,20 @@ processChildRequest(child):
     Processes a request once the initial headers have been sent.
 ]]--
 function processChildRequest(child)
+    local socket = child.socket
     if child.action == "GET" then
-        child.socket:send(greeting .. "\r\n")
-        SENT = SENT + (select(2, child.socket:getstats()) or 0)
-        table.insert(subscribers, child)
+        socket:send(greeting .. "\r\n")
+        table.insert(writeTo, socket)
+        for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
     elseif child.action == "HEAD" then
-        child.socket:send(greeting)
-        local y = 0
-        for k, v in pairs(subscribers) do y = y + 1 end
-        child.socket:send( ("X-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(TIME - START, y, X, RECEIVED, SENT) )
-        SENT = SENT + (select(2, child.socket:getstats()) or 0)
-        child.socket:close()
+        local msg = greeting .. ("Content-Length: 0\r\nConnection: keep-alive\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(TIME - START, #readFrom + #writeTo, X, RECEIVED, SENT)
+        socket:send(msg)
+        if not child['Connection'] or child['Connection'] == "close" then
+            closeSocket(socket)
+        else
+            child.action = nil
+            return
+        end
     elseif child.action == "POST" then
         local ip = child.socket.getpeername and child.socket:getpeername() or "?.?.?.?"
         for k, tip in pairs(trustedPeers or {}) do
@@ -305,72 +296,83 @@ function processChildRequest(child)
         if child.trusted then
             tinsert(waitingForJSON, child)
         else
-            child.socket:send("HTTP/1.1 403 Denied\r\n\r\nOnly trusted sources may send data!")
-            child.socket:close()
+            socket:send("HTTP/1.1 403 Denied\r\n\r\nOnly trusted sources may send data!")
+            closeSocket(socket)
         end
+    else
+         socket:send("HTTP/1.1 400 Bad request!\r\n\r\nBad request :(\r\n")
+         closeSocket(socket)       
     end
+end
+
+--[[ closeSocket: Closes a socket and removes it from the various socket arrays ]]--
+function closeSocket(socket)
+    local r,s = socket:getstats()
+    SENT = SENT + s
+    RECEIVED = RECEIVED + r
+    socket:close()
+    for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
+    for k, v in pairs(writeTo) do if v == socket then table.remove(writeTo, k) break end end
+    requests[socket] = nil
 end
 
 --[[ Check if a client has provided request header data ]]--
 function readRequests()
-    for k, child in pairs(presubscribers) do
-        if child then
-            local rl, err = child.socket:receive("*l")
-            if rl then 
-                upRec(rl)
-                if strlen(rl) == 0 then
-                    processChildRequest(child)
-                    presubscribers[k] = nil
-                else
-                    if not child.action then
-                        local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
-                        if not action or not uri then
-                            child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nBad request sent!")
-                            child.socket:close()
-                            presubscribers[k] = nil
+    local request = nil
+    local arr
+    while true do
+        arr = sselect(readFrom, nil, 0)
+        if arr and #arr > 0 then
+            for socket in pairs(arr) do
+                if type(socket) == "userdata" then
+                    local rl, err = socket:receive("*l")
+                    if rl then
+                        if #rl == 0 then
+                            processChildRequest(requests[socket])
                         else
-                            child.action = action:upper()
-                            child.uri = uri
+                            request = requests[socket]
+                            if not request.action then
+                                local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
+                                if not action or not uri then
+                                    socket:send("HTTP/1.1 400 Bad request\r\n\r\nBad request sent!")
+                                    closeSocket(socket)
+                                else
+                                    request.action = action:upper()
+                                    request.uri = uri
+                                end
+                            else
+                                local key, val = rl:match("(%S+): (.?)")
+                                request[key] = val
+                            end
                         end
+                    elseif err == "closed" then
+                        closeSocket(socket)
                     end
                 end
-            elseif err == "closed" then
-                presubscribers[k] = nil
-                child.socket:close()
             end
+        else
+            coroutine.yield()
         end
     end
 end
 
---[[ Initial client creation ]]--
-function createChild(socket)
-    X = X + 1
-    local obj = { 
-        socket = socket, 
-        trusted = false,
-        URI = nil,
-        action = nil
-    }
-    presubscribers[X] = obj
-end
-
-
-
---[[ Server event loop ]]--
-function eventLoop()
-    local child = maccept(master)
-    if child then
-        createChild(child)
-    end
-    readRequests()
-    checkJSON()
-    TIME = time()
-    if (TIME - latestPing) >= 5 then
-        latestPing = TIME
-        updateGit()
-        ping(TIME)
+--[[ acceptChildren: Accepts new connections and initializes them ]]--
+function acceptChildren()
+    while true do
+        local socket = maccept(master)
+        if socket then
+            X = X + 1
+            requests[socket] = { socket = socket }
+            tinsert(readFrom, socket)
+        else
+            coroutine.yield()
+        end
     end
 end
+
+-- Wrap accept and read as coroutines
+local accept = coroutine.wrap(acceptChildren)
+local read = coroutine.wrap(readRequests)
 
 
 --[[ Actual server program starts here ]]--
@@ -387,10 +389,20 @@ if not master then
     os.exit()
 end
 
-master:settimeout(0.005)
+master:settimeout(0)
 maccept = master.accept
 updateGit()
 
+--[[ Event loop ]]--
 while true do
-    eventLoop()
+    accept()
+    read()
+    checkJSON()
+    TIME = time()
+    if (TIME - latestPing) >= 5 then
+        latestPing = TIME
+        updateGit()
+        ping(TIME)
+    end
+    socket.sleep(0.00005)
 end
