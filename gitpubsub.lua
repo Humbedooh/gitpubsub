@@ -34,6 +34,7 @@ local RECEIVED = 0
 local START = os.time()
 local TIME = START
 local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.6\r\n"
+local z = 0
 
 --[[ function shortcuts ]]--
 local time, tinsert, strlen, sselect = os.time, table.insert, string.len, socket.select
@@ -200,7 +201,6 @@ function cwrite(who, what, uri)
     for k, socket in pairs(who) do
         if socket then
             request = requests[socket]
-            print(uri, request.uri)
             if not uri or uri:match("^"..request.uri) then
                 local x = socket:send(what .. "\r\n")
                 if x == nil then
@@ -318,17 +318,20 @@ end
 function readRequests()
     local request = nil
     local arr
+    local t = time()
     while true do
-        arr = sselect(readFrom, nil, 0)
+        arr = sselect(readFrom, nil, 0.001)
         if arr and #arr > 0 then
-            for socket in pairs(arr) do
+            for k,socket in pairs(readFrom) do
                 if type(socket) == "userdata" then
                     local rl, err = socket:receive("*l")
                     if rl then
+                        z = z + 1
+                        request = requests[socket]
+                        request.ping = t
                         if #rl == 0 then
-                            processChildRequest(requests[socket])
+                            processChildRequest(request)
                         else
-                            request = requests[socket]
                             if not request.action then
                                 local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
                                 if not action or not uri then
@@ -354,14 +357,29 @@ function readRequests()
     end
 end
 
+--[[ timeoutSockets: gathers up orphaned connections ]]--
+function timeoutSockets()
+    while true do
+        local t = time()
+        for k, socket in pairs(readFrom) do
+            local request = requests[socket]
+            if t - request.ping > 20 then
+                closeSocket(socket)
+            end
+        end
+        coroutine.yield()
+    end
+end
+
 --[[ acceptChildren: Accepts new connections and initializes them ]]--
 function acceptChildren()
     while true do
         local socket = maccept(master)
         if socket then
             X = X + 1
-            requests[socket] = { socket = socket }
+            requests[socket] = { socket = socket, ping = time() }
             tinsert(readFrom, socket)
+            z = z + 1
         else
             coroutine.yield()
         end
@@ -371,6 +389,7 @@ end
 -- Wrap accept and read as coroutines
 local accept = coroutine.wrap(acceptChildren)
 local read = coroutine.wrap(readRequests)
+local timeout = coroutine.wrap(timeoutSockets)
 
 
 --[[ Actual server program starts here ]]--
@@ -393,6 +412,7 @@ updateGit()
 
 --[[ Event loop ]]--
 while true do
+    z = 0
     accept()
     read()
     checkJSON()
@@ -401,10 +421,9 @@ while true do
         latestPing = TIME
         updateGit()
         ping(TIME)
+        timeout()
     end
-    if #readFrom + #writeTo > 0 then
-        socket.sleep(0.005)
-    else
+    if #readFrom == 0 or z == 0 then
         socket.sleep(0.05)
     end
 end
