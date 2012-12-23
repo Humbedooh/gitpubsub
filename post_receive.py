@@ -23,13 +23,16 @@ project = m.group(1)
 print("Posting commit message for project " + project)
 
 process = Popen(["git", "show", "--name-only", new], stdout=PIPE)
-#process = Popen(["ls", "-la"], stdout=PIPE)
 exit_code = os.waitpid(process.pid, 0)
 output = process.communicate()[0]
 
 commit = {'ref': ref, 'repository': "git", 'hash': new, 'project': project}
 
-headers, commit['log'] = output.split("\n\n", 1)
+arr = output.split("\n\n", 3)
+headers = arr[0]
+log = arr[1]
+if len(arr) == 3:
+    commit['files'] = re.findall(r"([^\r\n]+)", arr[2])
 
 parsed = dict(re.findall(r"(?P<name>[^:\n]+): (?P<value>[^\r\n]+)", headers))
 
