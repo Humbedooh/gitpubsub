@@ -1,11 +1,11 @@
 import re
 import os
 import sys
-import os
 import json
 from subprocess import Popen, PIPE
 from httplib2 import Http
 
+# Set this to point to your local gitpubsub server
 postURL = "http://localhost:2069/json"
 
 pwd = os.getcwd()
