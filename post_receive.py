@@ -27,16 +27,9 @@ process = Popen(["git", "show", "--name-only", new], stdout=PIPE)
 exit_code = os.waitpid(process.pid, 0)
 output = process.communicate()[0]
 
-output = """
-Author: Humbedooh <humbedooh@apache.org>
-Stuffs: Mooo
-
-Log message goes here
-"""
-
 commit = {'ref': ref, 'repository': "git", 'hash': new, 'project': project}
 
-headers, commit['log'] = output.split("\n\n", 2)
+headers, commit['log'] = output.split("\n\n", 1)
 
 parsed = dict(re.findall(r"(?P<name>[^:\n]+): (?P<value>[^\r\n]+)", headers))
 
