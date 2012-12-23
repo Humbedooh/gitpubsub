@@ -2,7 +2,7 @@ import re
 import os
 import sys
 import json
-import configParser;
+import ConfigParser;
 from subprocess import Popen, PIPE
 from httplib2 import Http
 
@@ -12,18 +12,12 @@ config.read('gitpubsub.cfg')
 # Set this to point to your local gitpubsub server
 postURL = config.get("Server", "URL", 0)
 
-pwd = os.getcwd()
 if len(sys.argv) <= 3:
     print("Usage: post-receive [old] [new] [ref]")
     exit()
 
 old, new, ref = sys.argv[1:4]
-m = re.match(r"^.*/([^/]+)$", pwd)
-if not m:
-    print("Could not figure out which project this is :(", project)
-    exit()
-
-project = m.group(1)
+project = os.path.basename(os.getcwd())
 print("Posting commit message for project " + project)
 
 process = Popen(["git", "show", "--name-only", new], stdout=PIPE)
