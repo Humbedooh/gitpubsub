@@ -237,9 +237,10 @@ checkJSON:
     to subscribers.
 ]]--
 function checkJSON()
+    local now = os.time()
     for k, child in pairs(waitingForJSON) do
         if child then
-            local rl, err = child.socket:receive("*l")
+            local rl, err = child.socket:receive("*l") print(now - child.putTime)
             if rl then 
                 local okay = false
                 if JSON then 
@@ -256,6 +257,10 @@ function checkJSON()
                 waitingForJSON[k] = nil
                 closeSocket(child.socket)
             elseif err == "closed" then
+                closeSocket(child.socket)
+                waitingForJSON[k] = nil
+            elseif (now - child.putTime > 5) then
+                child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nRequest timed out :(\r\n")
                 closeSocket(child.socket)
                 waitingForJSON[k] = nil
             end
@@ -283,7 +288,7 @@ function processChildRequest(child)
             child.action = nil
             return
         end
-    elseif child.action == "POST" then
+    elseif child.action == "PUT" then
         local ip = child.socket.getpeername and child.socket:getpeername() or "?.?.?.?"
         for k, tip in pairs(trustedPeers or {}) do
             if ip:match("^"..tip.."$") then
@@ -292,6 +297,7 @@ function processChildRequest(child)
             end
         end
         if child.trusted then
+            child.putTime = os.time()
             tinsert(waitingForJSON, child)
         else
             socket:send("HTTP/1.1 403 Denied\r\n\r\nOnly trusted sources may send data!")
@@ -328,8 +334,9 @@ function readRequests()
                     if rl then
                         z = z + 1
                         request = requests[socket]
-                        request.ping = t
+                        request.ping = t print(#rl, "[[" .. rl .. "]]")
                         if #rl == 0 then
+                            readFrom[k] = nil
                             processChildRequest(request)
                         else
                             if not request.action then
@@ -380,6 +387,7 @@ function acceptChildren()
             requests[socket] = { socket = socket, ping = time() }
             tinsert(readFrom, socket)
             z = z + 1
+            socket:settimeout(1)
         else
             coroutine.yield()
         end
