@@ -2,11 +2,15 @@ import re
 import os
 import sys
 import json
+import configParser;
 from subprocess import Popen, PIPE
 from httplib2 import Http
 
+config = ConfigParser.ConfigParser()
+config.read('gitpubsub.cfg')
+
 # Set this to point to your local gitpubsub server
-postURL = "http://localhost:2069/json"
+postURL = config.get("Server", "URL", 0)
 
 pwd = os.getcwd()
 if len(sys.argv) <= 3:
