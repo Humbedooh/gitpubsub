@@ -43,7 +43,7 @@ else:
     commit['email'] = "unknown@unknown"
 
 
-data = json.dumps(commit) + "\n\n"
+data = json.dumps({'commit': commit}) + "\n\n"
 print(data)
 Http().request(postURL, "PUT", data)
 
