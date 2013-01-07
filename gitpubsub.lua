@@ -276,7 +276,7 @@ processChildRequest(child):
 function processChildRequest(child)
     local socket = child.socket
     if child.action == "GET" then
-        socket:send(greeting .. "Content-Type: application/json\r\n\r\n")
+        socket:send(greeting .. "Content-Type: application/json\r\n")
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
     elseif child.action == "HEAD" then
@@ -334,7 +334,7 @@ function readRequests()
                     if rl then
                         z = z + 1
                         request = requests[socket]
-                        request.ping = t print(#rl, "[[" .. rl .. "]]")
+                        request.ping = t
                         if #rl == 0 then
                             readFrom[k] = nil
                             processChildRequest(request)
