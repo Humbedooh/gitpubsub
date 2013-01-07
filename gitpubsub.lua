@@ -33,7 +33,7 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local TIME = START
-local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.6\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.7\r\nTransfer-Encoding: Chunked\r\n"
 local z = 0
 
 --[[ function shortcuts ]]--
@@ -250,7 +250,7 @@ function checkJSON()
                 end
                 if okay then
                     cwrite(writeTo, rl .. ",", child.uri)
-                    child.socket:send(greeting .."\r\n\r\nMessage sent!\r\n")
+                    child.socket:send(greeting .."\r\nMessage sent!\r\n")
                 else
                     child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nInvalid JSON data posted :(\r\n")
                 end
@@ -276,7 +276,7 @@ processChildRequest(child):
 function processChildRequest(child)
     local socket = child.socket
     if child.action == "GET" then
-        socket:send(greeting .. "\r\n")
+        socket:send(greeting .. "Content-Type: application/json\r\n")
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
     elseif child.action == "HEAD" then
