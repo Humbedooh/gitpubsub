@@ -33,7 +33,7 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local TIME = START
-local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.7\r\nTransfer-Encoding: Chunked\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.7\r\n"
 local z = 0
 
 --[[ function shortcuts ]]--
@@ -202,7 +202,8 @@ function cwrite(who, what, uri)
         if socket then
             request = requests[socket]
             if not uri or uri:match("^"..request.uri) then
-                local x = socket:send(what .. "\r\n")
+                local len = string.format("%x", what:len() + 2)
+                local x = socket:send(len .. "\r\n" .. what .. "\r\n\r\n")
                 if x == nil then
                     closeSocket(socket)
                 end
@@ -227,7 +228,8 @@ end
 
 --[[ The usual 'stillalive' message sent to clients ]]--
 function ping(t)
-   cwrite(writeTo, ("{\"stillalive\": %u},"):format(t))
+    local t = socket.gettime()
+    cwrite(writeTo, ("{\"stillalive\": %f},"):format(t))
 end
 
 --[[ 
@@ -240,7 +242,7 @@ function checkJSON()
     local now = os.time()
     for k, child in pairs(waitingForJSON) do
         if child then
-            local rl, err = child.socket:receive("*l") print(now - child.putTime)
+            local rl, err = child.socket:receive("*l")
             if rl then 
                 local okay = false
                 if JSON then 
@@ -276,7 +278,7 @@ processChildRequest(child):
 function processChildRequest(child)
     local socket = child.socket
     if child.action == "GET" then
-        socket:send(greeting .. "Content-Type: application/json\r\n")
+        socket:send(greeting .. "Transfer-Encoding: chunked\r\nContent-Type: application/json\r\n\r\n")
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
     elseif child.action == "HEAD" then
