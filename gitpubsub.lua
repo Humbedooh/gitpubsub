@@ -313,6 +313,7 @@ end
 
 --[[ closeSocket: Closes a socket and removes it from the various socket arrays ]]--
 function closeSocket(socket)
+    if not socket then return end
     local r,s = socket:getstats()
     SENT = SENT + s
     RECEIVED = RECEIVED + r
@@ -372,7 +373,7 @@ function timeoutSockets()
         local t = time()
         for k, socket in pairs(readFrom) do
             local request = requests[socket]
-            if t - request.ping > 20 then
+            if not request or (t - request.ping > 20) then
                 closeSocket(socket)
             end
         end
