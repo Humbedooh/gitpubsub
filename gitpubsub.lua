@@ -282,7 +282,10 @@ function processChildRequest(child)
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
     elseif child.action == "HEAD" then
-        local msg = greeting .. ("Content-Length: 0\r\nConnection: keep-alive\r\nX-Uptime: %u\r\nX-Connections: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(TIME - START, #readFrom + #writeTo, X, RECEIVED, SENT)
+        local subs = 0
+        for k, v in pairs(readFrom) do if v then subs = subs + 1 end end
+        for k, v in pairs(writeTo) do if v then subs = subs + 1 end end
+        local msg = greeting .. ("Content-Length: 0\r\nConnection: keep-alive\r\nX-Uptime: %u\r\nX-Subscribers: %u\r\nX-Total-Connections: %u\r\nX-Received: %u\r\nX-Sent: %u\r\n\r\n"):format(TIME - START, subs, X, RECEIVED, SENT)
         socket:send(msg)
         if not child['Connection'] or child['Connection'] == "close" then
             closeSocket(socket)
