@@ -1,4 +1,17 @@
 # GitPubSub server configuration for the Python post-receive hook
 [Server]
-URL: http://localhost:2069/json
+URL:            http://localhost:2069/json
+port:           2069
+IP:             0.0.0.0
 
+[General]
+#rootFolder:    Where the git repos live. Set it to false to disable scanning
+#scanCriteria:  folders that match this are scanned
+#gitFolder:     Set to .git if need be.
+
+rootFolder:     false
+scanCriteria:   %.git
+gitFolder:      
+
+[Clients]
+trustedPeers:   127.0.0.* 192.168.0.*

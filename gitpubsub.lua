@@ -10,13 +10,21 @@ pcall(function() JSON = require "JSON" end) -- JSON: http://regex.info/code/JSON
 pcall(function() json = require "json" end) -- LuaJSON, if available
 local lfs = false -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
+local config = require "config" -- Configuration parser
 
---[[ General settings ]] --
-local rootFolder = nil -- Where the git repos live. Set it to nil to disable scanning
-local criteria = "%.git" -- folders that match this are scanned
-local gitFolder = "" -- Set this to "./git" if needed
-local trustedPeers = { "127.*" } -- a list of IP patterns we trust to make publications from the outside
-local port = 2069 -- port to bind to (or path of unix domain socket to use)
+
+--[[ General settings, defaults ]] --
+local cfg = config.read('gitpubsub.cfg')
+if not cfg.server or not cfg.server.port then
+    print("Could not load configuration, or vital parts are missing from it :(")
+    print("Please make sure gitpubsub.cfg is available and set up")
+    os.exit()
+end
+local trustedPeers = {}
+for ip in cfg.clients.trustedPeers:gmatch("(%S+)") do
+    print("Trusting requests from " .. ip)
+    table.insert(trustedPeers, ip)
+end
 
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
@@ -214,10 +222,10 @@ end
 
 --[[ Function for scanning Git repos ]]--
 function updateGit()
-    if rootFolder then
-        for repo in lfs.dir(rootFolder) do
-            if repo:match(criteria) then
-                local backlog = checkGit(rootFolder .. "/" .. repo, repo)
+    if cfg.general.rootFolder then
+        for repo in lfs.dir(cfg.general.rootFolder) do
+            if repo:match(cfg.general.scanCriteria or "") then
+                local backlog = checkGit(cfg.general.rootFolder .. "/" .. repo, repo)
                 for k, line in pairs(backlog) do
                     cwrite(writeTo, line..",")
                 end
@@ -407,16 +415,18 @@ local timeout = coroutine.wrap(timeoutSockets)
 
 
 --[[ Actual server program starts here ]]--
-if type(port) == "string" then
+if type(cfg.server.port) == "string" then
+    print("Binding to UNIX Domain Socket: " .. cfg.server.port)
     socket.unix = require "socket.unix"
     master = socket.unix()
-    master:setsockname(port)
+    master:setsockname(cfg.server.port)
     assert(master:listen())
-elseif type(port) == "number" then
-    master = socket.bind("*", port)
+elseif type(cfg.server.port) == "number" then
+    print("Binding to port " .. cfg.server.port)
+    master = socket.bind("*", cfg.server.port)
 end
 if not master then
-    print("Could not bind to port "..port..", exiting")
+    print("Could not bind to port "..cfg.server.port..", exiting")
     os.exit()
 end
 
@@ -425,6 +435,7 @@ maccept = master.accept
 updateGit()
 
 --[[ Event loop ]]--
+print("Ready to serve...")
 while true do
     z = 0
     accept()
