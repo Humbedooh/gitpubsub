@@ -41,7 +41,7 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local TIME = START
-local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.7\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.8\r\n"
 local z = 0
 
 --[[ function shortcuts ]]--
