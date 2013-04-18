@@ -48,6 +48,18 @@ Self-explanatory.
 Once you've set up GitPubSub, try running 
 `curl -i http://yourhost:2069/json` and watch the output.
 
+## Retriving past commits ##
+While the Pub/Sub model usually deals with real-time events, it is possible to go back in time and retrieve past events 
+using the `X-Fetch-Since` request header. This value must be set to the UTC UNIX timestamp of the last time 
+a client visited the Pub/Sub service, in order to continue where it left off. For example, one could construct the 
+following request:
+
+    GET /json HTTP/1.1
+    X-Fetch-Since: 1366268954
+
+These timestamps can be acquired by parsing the `stillalive` messages sent by GitPubSub, using the 
+`X-Timestamp` response header sent back from POST/PUT requests, or by using whatever time function 
+your programming language provides.
 
 ## Access control: ##
 The `trustedPeers` array contains a list of clients allowed to publish 

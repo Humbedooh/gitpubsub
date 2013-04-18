@@ -26,6 +26,7 @@ for ip in cfg.clients.trustedPeers:gmatch("(%S+)") do
     table.insert(trustedPeers, ip)
 end
 
+
 --[[ Miscellaneous variables used throughout the process ]]--
 local latestGit = 0 -- timestamp for latest git update
 local latestPing = 0 -- timestamp for latest ping
@@ -41,8 +42,10 @@ local SENT = 0
 local RECEIVED = 0
 local START = os.time()
 local TIME = START
-local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.8\r\n"
+local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.9\r\n"
 local z = 0
+local history = {}
+local callbacks = {}
 
 --[[ function shortcuts ]]--
 local time, tinsert, strlen, sselect = os.time, table.insert, string.len, socket.select
@@ -227,7 +230,7 @@ function updateGit()
             if repo:match(cfg.general.scanCriteria or "") then
                 local backlog = checkGit(cfg.general.rootFolder .. "/" .. repo, repo)
                 for k, line in pairs(backlog) do
-                    cwrite(writeTo, line..",")
+                    cwrite(writeTo, line)
                 end
             end
         end
@@ -237,7 +240,7 @@ end
 --[[ The usual 'stillalive' message sent to clients ]]--
 function ping(t)
     local t = socket.gettime()
-    cwrite(writeTo, ("{\"stillalive\": %f},"):format(t))
+    cwrite(writeTo, ("{\"stillalive\": %f}"):format(t))
 end
 
 --[[ 
@@ -259,8 +262,9 @@ function checkJSON()
                     okay = pcall(function() return json.decode(rl) end)
                 end
                 if okay then
+                    table.insert(history, { timestamp = now, data = rl, uri = child.uri } )
                     cwrite(writeTo, rl .. ",", child.uri)
-                    child.socket:send(greeting .."\r\nMessage sent!\r\n")
+                    child.socket:send(greeting .."X-Timestamp: " .. now .. "\r\n\r\nMessage sent!\r\n")
                 else
                     child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nInvalid JSON data posted :(\r\n")
                 end
@@ -289,6 +293,21 @@ function processChildRequest(child)
         socket:send(greeting .. "Transfer-Encoding: chunked\r\nContent-Type: application/json\r\n\r\n")
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
+        if child['X-Fetch-Since'] then
+            local curi = (child.uri or "/json"):gsub("%%", "%%")
+            local when = tonumber(child['X-Fetch-Since']) or os.time()
+            local f = coroutine.create(
+                function()
+                    for k, entry in pairs(history) do
+                        if entry.timestamp >= when and entry.uri:match("^" .. child.uri) then
+                            cwrite({socket}, entry.data, child.uri)
+                        end
+                        coroutine.yield()
+                    end
+                end
+            )
+            table.insert(callbacks, f)
+        end
     elseif child.action == "HEAD" then
         local subs = 0
         for k, v in pairs(readFrom) do if v then subs = subs + 1 end end
@@ -301,7 +320,7 @@ function processChildRequest(child)
             child.action = nil
             return
         end
-    elseif child.action == "PUT" then
+    elseif child.action == "PUT" or child.action == "POST" then
         local ip = child.socket.getpeername and child.socket:getpeername() or "?.?.?.?"
         for k, tip in pairs(trustedPeers or {}) do
             if ip:match("^"..tip.."$") then
@@ -363,8 +382,10 @@ function readRequests()
                                     request.uri = uri
                                 end
                             else
-                                local key, val = rl:match("(%S+): (.?)")
-                                request[key] = val
+                                local key, val = rl:match("(%S+): (.+)")
+                                if key then
+                                    request[key] = val
+                                end
                             end
                         end
                     elseif err == "closed" then
@@ -408,6 +429,17 @@ function acceptChildren()
     end
 end
 
+--[[ prune: prunes the latest JSON history, dropping outdated data ]]--
+function prune()
+    local now = os.time()
+    local timeout = now - (60*60*48) -- keep the latest 48 hours of history
+    for k, entry in pairs(history) do
+        if entry.timestamp < timeout then
+            history[k] = nil
+        end
+    end
+end
+
 -- Wrap accept and read as coroutines
 local accept = coroutine.wrap(acceptChildren)
 local read = coroutine.wrap(readRequests)
@@ -447,6 +479,14 @@ while true do
         updateGit()
         ping(TIME)
         timeout()
+        prune()
+    end
+    if #callbacks > 0 then
+        for k, callback in pairs(callbacks) do
+            if not coroutine.resume(callback) then
+                callbacks[k] = nil
+            end
+        end
     end
     if #readFrom == 0 or z == 0 then
         socket.sleep(0.05)
