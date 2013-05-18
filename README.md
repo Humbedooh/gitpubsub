@@ -32,7 +32,7 @@ use the following script (edit it to fit your server):
 This will cause new commits to publish to `http://localhost:2069/json` 
 by default.
 
-### Manually pusblishing JSON data ###
+### Manually publishing JSON data ###
 GitPubSub offers any client matching the `trustedPeers` list 
 to publicise data to all other clients. This is done by doing 
 a `POST` request to the URI they wish to publish to:
@@ -48,7 +48,7 @@ Self-explanatory.
 Once you've set up GitPubSub, try running 
 `curl -i http://yourhost:2069/json` and watch the output.
 
-## Retriving past commits ##
+## Retrieving past commits ##
 While the Pub/Sub model usually deals with real-time events, it is possible to go back in time and retrieve past events 
 using the `X-Fetch-Since` request header. This value must be set to the UTC UNIX timestamp of the last time 
 a client visited the Pub/Sub service, in order to continue where it left off. For example, one could construct the 
