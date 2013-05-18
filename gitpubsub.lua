@@ -6,9 +6,9 @@
 --[[ External dependencies ]]--
 local json = false
 local JSON = false
+local lfs = false
 pcall(function() JSON = require "JSON" end) -- JSON: http://regex.info/code/JSON.lua
 pcall(function() json = require "json" end) -- LuaJSON, if available
-local lfs = false -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 local config = require "config" -- Configuration parser
 
@@ -46,11 +46,12 @@ local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.9\r\n"
 local z = 0
 local history = {}
 local callbacks = {}
+local gitFolder = ""
 
 --[[ function shortcuts ]]--
 local time, tinsert, strlen, sselect = os.time, table.insert, string.len, socket.select
 
-if rootFolder then
+if cfg.general.rootFolder then
     lfs = require "lfs"
 end
 
@@ -126,6 +127,7 @@ function checkGit(repo, name)
             end
         end
         if not found then
+            tag = tag:gsub("\"", "")
             table.insert(gitTags[repo], tag)
             local prg = io.popen(("git --git-dir %s%s show \"%s\""):format(repo, gitFolder, tag), "r")
             local tagdata = prg:read("*a")
@@ -225,7 +227,7 @@ end
 
 --[[ Function for scanning Git repos ]]--
 function updateGit()
-    if cfg.general.rootFolder then
+    if cfg.general.rootFolder and lfs then
         for repo in lfs.dir(cfg.general.rootFolder) do
             if repo:match(cfg.general.scanCriteria or "") then
                 local backlog = checkGit(cfg.general.rootFolder .. "/" .. repo, repo)
@@ -464,6 +466,7 @@ end
 
 master:settimeout(0)
 maccept = master.accept
+gitFolder = cfg.general.gitFolder or ""
 updateGit()
 
 --[[ Event loop ]]--
