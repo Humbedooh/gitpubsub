@@ -6,9 +6,9 @@
 --[[ External dependencies ]]--
 local json = false
 local JSON = false
-local lfs = false
 pcall(function() JSON = require "JSON" end) -- JSON: http://regex.info/code/JSON.lua
 pcall(function() json = require "json" end) -- LuaJSON, if available
+local lfs = false -- LuaFileSystem
 local socket = require "socket" -- Lua Sockets
 local config = require "config" -- Configuration parser
 
@@ -46,163 +46,17 @@ local greeting = "HTTP/1.1 200 OK\r\nServer: GitPubSub/0.9\r\n"
 local z = 0
 local history = {}
 local callbacks = {}
-local gitFolder = ""
 
 --[[ function shortcuts ]]--
 local time, tinsert, strlen, sselect = os.time, table.insert, string.len, socket.select
 
-if cfg.general.rootFolder then
+if rootFolder then
     lfs = require "lfs"
 end
 
 local readFrom = {}
 local writeTo = {}
 local requests = {}
-
---[[ 
-    checkGit(file-path, project-name):
-    Runs a scan of the git directory and produces JSON output for new commits, tags and branches.
-]]--
-function checkGit(repo, name)
-    local backlog = {}
-    local prg = io.popen(("git --git-dir %s%s log -n 20 --summary --tags --raw --date=raw --reverse --pretty=format:\"%%H|%%h|%%ct|%%aN|%%ae|%%s|%%d\" --all"):format(repo, gitFolder), "r")
-    local data = prg:read("*a")
-    prg:close()
-    gitRepos[repo] = gitRepos[repo] or {lastCommit=-1}
-    gitTags[repo] = gitTags[repo] or {}
-    gitBranches[repo] = gitBranches[repo] or {}
-    local repoData = gitRepos[repo]
-    repoData.lastLog = data
-    repoData.lastCommit = repoData.lastCommit or -1
-    if getLast then repoData.lastCommit = repoData.lastCommit - 1 end
-    local commits = {}
-    local Xcommit = {files={}}
-    for commit in data:gmatch("([^\r\n]+)") do
-        local bigHash,hash,id,author,email,subject,refs = commit:match("([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]*)")
-        refs = (refs and refs:len() > 0) and refs or "origin/master"
-        id = tonumber(id)
-        if not id then
-            Xcommit.files = Xcommit.files or {}
-            if commit:match("^:") then 
-                table.insert(Xcommit.files, commit:match("%s+%S%s+(.+)") or "(unknown file)")
-            end
-        else
-            local ref = refs:match("([^%s/]+/[^%s/,]+)") or refs or "(nil)"
-            ref = ref:gsub("^%(", ""):gsub("%)$", "")
-            Xcommit = { repository="git",dirs_changed={name},project=name,big_hash=bigHash,hash=hash,timestamp=id,author=author,email=email,subject=subject,log=subject,ref=ref,files={},revision=hash}
-            table.insert(commits, Xcommit)
-        end
-    end
-    for k, commit in pairs(commits) do
-        if commit.timestamp then
-            if repoData.lastCommit < 0 then 
-                repoData.lastCommit = commit.timestamp
-            end
-            if commit.author and commit.subject and commit.email and commit.timestamp > repoData.lastCommit then
-                local mod = #commit.files .. " files"
-                if #commit.files == 1 then mod = commit.files[1] end
-                commit.changes = mod
-                local output = ""
-                if JSON then 
-                    output = JSON:encode({commit=commit})
-                elseif json then
-                    output = json.encode({commit=commit})
-                end
-                table.insert(backlog, output)
-            end
-            if commit.timestamp >= repoData.lastCommit then repoData.lastCommit = commit.timestamp end
-        end
-    end
-
-    -- tags
-    local prg = io.popen(("git --git-dir %s%s tag"):format(repo, gitFolder), "r")
-    local data = prg:read("*a")
-    prg:close()
-    for tag in data:gmatch("([^\r\n]+)") do
-        local found = false
-        for k, v in pairs(gitTags[repo]) do
-            if v == tag then
-                found = true
-                break
-            end
-        end
-        if not found then
-            tag = tag:gsub("\"", "")
-            table.insert(gitTags[repo], tag)
-            local prg = io.popen(("git --git-dir %s%s show \"%s\""):format(repo, gitFolder, tag), "r")
-            local tagdata = prg:read("*a")
-            prg:close()
-            local tagger, email = tagdata:match("Tagger: (.-) <(.-)>")
-            if not email then
-                tagger, email = tagdata:match("Author: (.-) <(.-)>")
-            end
-            local commit = {
-                author = tagger or "??",
-                email = email or "??@??",
-                log="New tag: " .. tag,
-                dirs_changed = {name},
-                files = "(prop-edit)",
-                ref=tag,
-                repository="git-prop-edit",
-                revision = "",
-                project=name
-            }
-            local output = ""
-            if JSON then 
-                output = JSON:encode({commit=commit})
-            elseif json then
-                output = json.encode({commit=commit})
-            end
-
-            table.insert(backlog, output)
-        end
-    end
-
-    -- branches
-    local prg = io.popen(("git --git-dir %s%s branch"):format(repo, gitFolder), "r")
-    local data = prg:read("*a")
-    prg:close()
-    for tag in data:gmatch("([^\r\n]+)") do
-        tag = tag:sub(3)
-        local found = false
-        for k, v in pairs(gitBranches[repo]) do
-            if v == tag then
-                found = true
-                break
-            end
-        end
-        if not found then
-            table.insert(gitBranches[repo], tag)
-            local prg = io.popen(("git --git-dir %s%s show \"%s\""):format(repo, gitFolder, tag), "r")
-            local tagdata = prg:read("*a")
-            prg:close()
-            local tagger, email = tagdata:match("Tagger: (.-) <(.-)>")
-            if not email then
-                tagger, email = tagdata:match("Author: (.-) <(.-)>")
-            end
-            local commit = {
-                author = tagger or "??",
-                email = email or "??@??",
-                log="New branch: " .. tag,
-                dirs_changed = {name},
-                files = "(prop-edit)",
-                ref=tag,
-                repository="git-prop-edit",
-                revision = "",
-                project=name
-            }
-            local output = ""
-            if JSON then 
-                output = JSON:encode({commit=commit})
-            elseif json then
-                output = json.encode({commit=commit})
-            end
-            table.insert(backlog, output)
-        end
-    end
-    return backlog
-end
-
 
 
 --[[ cwrite: Write to one or more sockets, close them if need be ]]--
@@ -219,20 +73,6 @@ function cwrite(who, what, uri)
                 local x = socket:send(len .. "\r\n" .. what .. "\r\n\r\n")
                 if x == nil then
                     closeSocket(socket)
-                end
-            end
-        end
-    end
-end
-
---[[ Function for scanning Git repos ]]--
-function updateGit()
-    if cfg.general.rootFolder and lfs then
-        for repo in lfs.dir(cfg.general.rootFolder) do
-            if repo:match(cfg.general.scanCriteria or "") then
-                local backlog = checkGit(cfg.general.rootFolder .. "/" .. repo, repo)
-                for k, line in pairs(backlog) do
-                    cwrite(writeTo, line)
                 end
             end
         end
@@ -265,7 +105,7 @@ function checkJSON()
                 end
                 if okay then
                     table.insert(history, { timestamp = now, data = rl, uri = child.uri } )
-                    cwrite(writeTo, rl .. ",", child.uri)
+                    cwrite(writeTo, rl, child.uri)
                     child.socket:send(greeting .."X-Timestamp: " .. now .. "\r\n\r\nMessage sent!\r\n")
                 else
                     child.socket:send("HTTP/1.1 400 Bad request\r\n\r\nInvalid JSON data posted :(\r\n")
@@ -292,7 +132,7 @@ processChildRequest(child):
 function processChildRequest(child)
     local socket = child.socket
     if child.action == "GET" then
-        socket:send(greeting .. "Transfer-Encoding: chunked\r\nContent-Type: application/json\r\n\r\n")
+        socket:send(greeting .. "Transfer-Encoding: chunked\r\nContent-Type: application/x-gitpubsub\r\n\r\n")
         table.insert(writeTo, socket)
         for k, v in pairs(readFrom) do if v == socket then table.remove(readFrom, k) break end end
         if child['X-Fetch-Since'] then
@@ -369,24 +209,26 @@ function readRequests()
                     if rl then
                         z = z + 1
                         request = requests[socket]
-                        request.ping = t
-                        if #rl == 0 then
-                            readFrom[k] = nil
-                            processChildRequest(request)
-                        else
-                            if not request.action then
-                                local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
-                                if not action or not uri then
-                                    socket:send("HTTP/1.1 400 Bad request\r\n\r\nBad request sent!")
-                                    closeSocket(socket)
-                                else
-                                    request.action = action:upper()
-                                    request.uri = uri
-                                end
+                        if request then
+                            request.ping = t
+                            if #rl == 0 then
+                                readFrom[k] = nil
+                                processChildRequest(request)
                             else
-                                local key, val = rl:match("(%S+): (.+)")
-                                if key then
-                                    request[key] = val
+                                if not request.action then
+                                    local action, uri = rl:match("^(%S+) (.-) HTTP/1.%d$")
+                                    if not action or not uri then
+                                        socket:send("HTTP/1.1 400 Bad request\r\n\r\nBad request sent!")
+                                        closeSocket(socket)
+                                    else
+                                        request.action = action:upper()
+                                        request.uri = uri
+                                    end
+                                else
+                                    local key, val = rl:match("(%S+): (.+)")
+                                    if key then
+                                        request[key] = val
+                                    end
                                 end
                             end
                         end
@@ -466,8 +308,6 @@ end
 
 master:settimeout(0)
 maccept = master.accept
-gitFolder = cfg.general.gitFolder or ""
-updateGit()
 
 --[[ Event loop ]]--
 print("Ready to serve...")
@@ -479,7 +319,6 @@ while true do
     TIME = time()
     if (TIME - latestPing) >= 5 then
         latestPing = TIME
-        updateGit()
         ping(TIME)
         timeout()
         prune()
@@ -492,6 +331,6 @@ while true do
         end
     end
     if #readFrom == 0 or z == 0 then
-        socket.sleep(0.05)
+        socket.sleep(0.1)
     end
 end
