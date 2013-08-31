@@ -15,14 +15,8 @@ subscribe to whichever specific segment they wish to listen in on.
 
 
 ## Publishing data to GitPubSub ##
-If `rootFolder` is set, the server scans the local git repositories for 
-changes and publishes these through the HTTP service (listening on 
-the default svnpubsub port 2069) in JSON format at the URI `/json`.
-
-### Using a post-receive hook to publish commits ###
-If you don't feel like parsing the git repo every 5 seconds, you 
-can instead add a post-receive hook to your Git server. Simply 
-use the following script (edit it to fit your server):
+To send data through gitpubsub, add a post-receive hook to your Git server. 
+Simply use the following script (edit it to fit your server):
 
     while read oldrev newrev refname
     do
@@ -30,7 +24,7 @@ use the following script (edit it to fit your server):
     done
 
 This will cause new commits to publish to `http://localhost:2069/json` 
-by default.
+by default. Or you can use the python version instead.
 
 ### Manually publishing JSON data ###
 GitPubSub offers any client matching the `trustedPeers` list 
